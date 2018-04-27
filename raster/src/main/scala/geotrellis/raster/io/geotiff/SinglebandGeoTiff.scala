@@ -21,7 +21,9 @@ import geotrellis.raster._
 import geotrellis.raster.io.geotiff.reader.GeoTiffReader
 import geotrellis.vector.Extent
 import geotrellis.proj4.CRS
+import geotrellis.raster.crop.Crop
 import geotrellis.raster.resample.ResampleMethod
+import spire.syntax.cfor._
 
 case class SinglebandGeoTiff(
   tile: Tile,
@@ -29,7 +31,7 @@ case class SinglebandGeoTiff(
   crs: CRS,
   tags: Tags,
   options: GeoTiffOptions,
-  overviews: List[SinglebandGeoTiff] = Nil
+  overviews: List[GeoTiff[Tile]] = Nil
 ) extends GeoTiff[Tile] {
   val cellType = tile.cellType
 
@@ -45,9 +47,9 @@ case class SinglebandGeoTiff(
       case _ => tile.toGeoTiffTile(options)
     }
 
-  def crop(subExtent: Extent): SinglebandGeoTiff = {
+  def crop(subExtent: Extent, options: Crop.Options): SinglebandGeoTiff = {
     val raster: Raster[Tile] =
-      this.raster.crop(subExtent)
+      this.raster.crop(subExtent, options)
 
     SinglebandGeoTiff(raster, subExtent, this.crs, this.tags, this.options, this.overviews)
   }
@@ -62,15 +64,84 @@ case class SinglebandGeoTiff(
     SinglebandGeoTiff(raster, raster._2, this.crs, this.tags, this.options, this.overviews)
   }
 
+  def crop(gridBounds: GridBounds): SinglebandGeoTiff =
+    crop(gridBounds.colMin, gridBounds.rowMin, gridBounds.colMax, gridBounds.rowMax)
+  
+  def crop(subExtent: Extent): SinglebandGeoTiff = crop(subExtent, Crop.Options.DEFAULT)
+
   def crop(subExtent: Extent, cellSize: CellSize, resampleMethod: ResampleMethod, strategy: OverviewStrategy): SinglebandRaster =
     getClosestOverview(cellSize, strategy)
-      .crop(subExtent)
+      .crop(subExtent, Crop.Options(clamp = false))
       .resample(RasterExtent(subExtent, cellSize), resampleMethod, strategy)
+
+  def crop(windows: Seq[GridBounds]): Iterator[(GridBounds, Tile)] = tile match {
+    case geotiffTile: GeoTiffTile => geotiffTile.crop(windows)
+    case arrayTile: Tile => arrayTile.crop(windows)
+  }
 
   def resample(rasterExtent: RasterExtent, resampleMethod: ResampleMethod, strategy: OverviewStrategy): SinglebandRaster =
     getClosestOverview(cellSize, strategy)
       .raster
       .resample(rasterExtent, resampleMethod)
+
+  def buildOverview(resampleMethod: ResampleMethod, decimationFactor: Int, blockSize: Int): SinglebandGeoTiff = {
+    val overviewRasterExtent = RasterExtent(
+      extent,
+      cols = math.ceil(tile.cols.toDouble / decimationFactor).toInt,
+      rows = math.ceil(tile.rows.toDouble / decimationFactor).toInt
+    )
+
+    val segmentLayout: GeoTiffSegmentLayout = GeoTiffSegmentLayout(
+      totalCols = overviewRasterExtent.cols,
+      totalRows = overviewRasterExtent.rows,
+      storageMethod = Tiled(blockSize, blockSize),
+      interleaveMethod = PixelInterleave,
+      bandType = BandType.forCellType(tile.cellType))
+
+    // force ArrayTile to avoid costly compressor thrashing in GeoTiff segments when resample will stride segments
+    val segments: Seq[((Int, Int), Tile)] = Raster(tile.toArrayTile(), extent)
+      .resample(overviewRasterExtent, resampleMethod)
+      .tile
+      .split(segmentLayout.tileLayout)
+      .zipWithIndex
+      .map { case (tile, index) =>
+        val col = index % segmentLayout.tileLayout.layoutCols
+        val row = index / segmentLayout.tileLayout.layoutCols
+        ((col, row), tile)
+      }
+
+    val storageMethod = Tiled(blockSize, blockSize)
+    val overviewOptions = options.copy(subfileType = Some(ReducedImage), storageMethod = storageMethod)
+    val overviewTile = GeoTiffBuilder[Tile].makeTile(
+      segments.toIterator, segmentLayout, cellType, options.compression
+    )
+
+    SinglebandGeoTiff(overviewTile, extent, crs, Tags.empty, overviewOptions)
+  }
+
+  def withOverviews(resampleMethod: ResampleMethod, decimations: List[Int] = Nil, blockSize: Int = GeoTiff.DefaultBlockSize): SinglebandGeoTiff = {
+    val overviewDecimations: List[Int] =
+      if (decimations.isEmpty) {
+        GeoTiff.defaultOverviewDecimations(tile.cols, tile.rows, blockSize)
+      } else {
+        decimations
+      }
+
+    if (overviewDecimations.isEmpty) {
+      this
+    } else {
+      // force ArrayTile to avoid costly compressor thrashing in GeoTiff segments when resample will stride segments
+      val arrayTile = tile.toArrayTile()
+      val staged = SinglebandGeoTiff(arrayTile, extent, crs, tags, options, Nil)
+      val overviews = overviewDecimations.map { (decimationFactor: Int) =>
+        staged.buildOverview(resampleMethod, decimationFactor, blockSize)
+      }
+      SinglebandGeoTiff(tile, extent, crs, tags, options, overviews)
+    }
+  }
+
+  def copy(tile: Tile, extent: Extent, crs: CRS, tags: Tags, options: GeoTiffOptions, overviews: List[GeoTiff[Tile]]): SinglebandGeoTiff =
+    SinglebandGeoTiff(tile, extent, crs, tags, options, overviews)
 }
 
 object SinglebandGeoTiff {

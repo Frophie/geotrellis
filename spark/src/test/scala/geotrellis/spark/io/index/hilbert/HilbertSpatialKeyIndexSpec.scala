@@ -16,16 +16,16 @@
 
 package geotrellis.spark.io.index.hilbert
 
+import geotrellis.spark.io.index.HilbertKeyIndexMethod
 import org.scalatest._
-import scala.collection.immutable.TreeSet
-import geotrellis.spark.SpatialKey
+
+import geotrellis.spark.{KeyBounds, SpatialKey}
 
 class HilbertSpatialKeyIndexSpec extends FunSpec with Matchers{
 
   val upperBound: Int = 64
 
   describe("HilbertSpatialKeyIndex tests"){
-
     it("Generates a Long index given a SpatialKey"){
       val hilbert = HilbertSpatialKeyIndex(SpatialKey(0,0), SpatialKey(upperBound,upperBound), 6) //what are the SpatialKeys used for?
 
@@ -88,5 +88,11 @@ class HilbertSpatialKeyIndexSpec extends FunSpec with Matchers{
         idx.length should be (3)
         idx.toSet should be (Set(1->2, 7->8, 11->15))
      }
+  }
+
+  it("Generates a Correct index given a 4x4 square on a 10th zoom level") {
+    val keyBounds = KeyBounds(SpatialKey(177, 409), SpatialKey(178, 410))
+    val index = HilbertKeyIndexMethod.createIndex(keyBounds)
+    index.toIndex(SpatialKey(178, 410)) should be (2)
   }
 }

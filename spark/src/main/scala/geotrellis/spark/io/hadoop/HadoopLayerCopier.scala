@@ -41,7 +41,7 @@ class HadoopLayerCopier(
   def copy[
     K: AvroRecordCodec: Boundable: JsonFormat: ClassTag,
     V: AvroRecordCodec: ClassTag,
-    M: JsonFormat: GetComponent[?, Bounds[K]]
+    M: JsonFormat: Component[?, Bounds[K]]
   ](from: LayerId, to: LayerId): Unit = {
     if (!attributeStore.layerExists(from)) throw new LayerNotFoundError(from)
     if (attributeStore.layerExists(to)) throw new LayerExistsError(to)
@@ -52,9 +52,9 @@ class HadoopLayerCopier(
       case e: AttributeNotFoundError => throw new LayerReadError(from).initCause(e)
     }
     val newPath = new Path(rootPath,  s"${to.name}/${to.zoom}")
-    HdfsUtils.copyPath(header.path, newPath, sc.hadoopConfiguration)
+    HdfsUtils.copyPath(new Path(header.path), newPath, sc.hadoopConfiguration)
     attributeStore.writeLayerAttributes(
-      to, header.copy(path = newPath), metadata, keyIndex, writerSchema
+      to, header.copy(path = newPath.toUri), metadata, keyIndex, writerSchema
     )
   }
 }

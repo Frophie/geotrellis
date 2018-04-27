@@ -16,6 +16,7 @@
 
 package geotrellis.util
 
+import scala.collection.immutable.NumericRange
 import java.nio.{ByteOrder, ByteBuffer}
 
 /**
@@ -33,119 +34,135 @@ import java.nio.{ByteOrder, ByteBuffer}
   *
   * @return A new instance of StreamingByteReader
   */
-class StreamingByteReader(rangeReader: RangeReader, chunkSize: Int = 65536) extends ByteReader {
-  class Chunk(val offset: Long, val length: Int, _data: () => Array[Byte]) {
-    private var loadedData: Option[Array[Byte]] = None
-    def data: Array[Byte] = {
-      loadedData match {
-        case Some(d) => d
-        case None =>
-          val d = _data()
-          loadedData = Some(d)
-          d
-      }
-    }
-    lazy val buffer: ByteBuffer = ByteBuffer.wrap(data).order(_byteOrder)
+class StreamingByteReader(rangeReader: RangeReader, chunkSize: Int = 45876) extends ByteReader {
+// 1. position change does not trigger any reading action
+// 2. chunks are read in increments
+// 3. if loaded chunk intersects the read range, incorporate it
+// 4. if read is in chunk range, reset position
 
-    def bufferPosition =
-      loadedData match {
-        case Some(d) => buffer.position
-        case None => 0
-      }
+  private var chunkBytes: Array[Byte] = _
+  private var chunkBuffer: ByteBuffer = _
+  private var chunkRange: NumericRange[Long] = 1l to 0l // empty
+  private var filePosition: Long = 0l
+  private var byteOrder: ByteOrder = ByteOrder.BIG_ENDIAN
+
+  def position: Long = filePosition
+
+  def position(newPosition: Long): ByteReader = {
+    filePosition = newPosition
+    this
   }
 
-  private var _chunk: Option[Chunk] = None
-  private def chunk: Chunk =
-    _chunk match {
-      case Some(c) => c
-      case None => adjustChunk(0)
-    }
+  def order: ByteOrder = byteOrder
 
-  private var _byteOrder: ByteOrder = ByteOrder.BIG_ENDIAN
-  def order = _byteOrder
   def order(byteOrder: ByteOrder): Unit = {
-    _byteOrder = byteOrder
-    _chunk.foreach(_.buffer.order(byteOrder))
+    this.byteOrder = byteOrder
+    if (null != chunkBuffer) chunkBuffer.order(byteOrder)
   }
 
-  def position: Long = chunk.offset + chunk.bufferPosition
+  private def readChunk(newRange: NumericRange[Long]): Unit = {
+    if (null != chunkBytes && newRange.start >= chunkRange.start && newRange.end <= chunkRange.end)
+      // new range is equal or subset of old range, nothing new to read
+      return
 
-  def position(newPoint: Long): ByteReader = {
-    if (isContained(newPoint)) {
-      chunk.buffer.position((newPoint - chunk.offset).toInt)
-      this
+    else if (null != chunkBytes && chunkRange.start <= newRange.end && newRange.start <= chunkRange.end) {
+      // new range overlaps old range
+
+      val intersection: NumericRange[Long] =
+        math.max(chunkRange.start, newRange.start) to math.min(chunkRange.end, newRange.end)
+
+      // copy intersecting bytes from old to new chunk
+      val newChunkBytes: Array[Byte] = Array.ofDim[Byte](newRange.length)
+      System.arraycopy(chunkBytes, (intersection.start - chunkRange.start).toInt,
+                       newChunkBytes, (intersection.start - newRange.start).toInt, intersection.length)
+
+      // read missing bytes in the front, if any
+      if (newRange.start < chunkRange.start) {
+        val length = (chunkRange.start - newRange.start).toInt
+        val bytes = rangeReader.readRange(newRange.start, length)
+        System.arraycopy(bytes, 0, newChunkBytes, 0, length)
+      }
+
+      // read missing bytes on the end, if any
+      if (newRange.end > chunkRange.end) {
+        val length = (newRange.end - chunkRange.end).toInt
+        val bytes = rangeReader.readRange(chunkRange.end + 1, length)
+        System.arraycopy(bytes, 0, newChunkBytes, newRange.length - length, length)
+      }
+
+      chunkBytes = newChunkBytes
+      chunkRange = newRange
+      chunkBuffer = ByteBuffer.wrap(chunkBytes).order(byteOrder)
+
     } else {
-      adjustChunk(newPoint)
-      this
+      // new range does not overlap old range, read it
+      chunkBytes = rangeReader.readRange(newRange.start, newRange.length)
+      chunkRange = newRange
+      chunkBuffer = ByteBuffer.wrap(chunkBytes).order(byteOrder)
     }
   }
 
-  private def adjustChunk: Unit =
-    adjustChunk(position)
+  /** Ensure we can read given number of bytes from current filePosition */
+  private def ensureChunk(length: Int): Unit = {
+    val trimmed = math.min(length, (rangeReader.totalLength - filePosition).toInt)
+    if (!chunkRange.contains(filePosition) || !chunkRange.contains(filePosition + trimmed - 1)) {
+      val len = math.min(math.max(length, chunkSize), (rangeReader.totalLength - filePosition).toInt)
+      readChunk(filePosition to (filePosition + len - 1))
+    }
 
-  private def adjustChunk(newPoint: Long): Chunk =
-    adjustChunk(newPoint, chunkSize)
-
-  private def adjustChunk(newPoint: Long, length: Int): Chunk = {
-    val c = new Chunk(newPoint, length, () => rangeReader.readRange(newPoint, length))
-    _chunk = Some(c)
-    c
+    if (filePosition != chunkRange.start + chunkBuffer.position)
+      chunkBuffer.position((filePosition - chunkRange.start).toInt)
   }
 
   def getBytes(length: Int): Array[Byte] = {
-    if (chunk.bufferPosition + length > chunk.length)
-      adjustChunk(position, length)
-    chunk.data.slice(chunk.bufferPosition, chunk.bufferPosition + length)
+    ensureChunk(length)
+    val bytes = Array.ofDim[Byte](length)
+    chunkBuffer.get(bytes)
+    filePosition += length
+    bytes
   }
 
   def get: Byte = {
-    if (chunk.bufferPosition + 1 > chunk.length)
-      adjustChunk
-    chunk.buffer.get
+    ensureChunk(1)
+    filePosition += 1
+    chunkBuffer.get
   }
 
   def getChar: Char = {
-    if (chunk.bufferPosition + 2 > chunk.length)
-      adjustChunk
-    chunk.buffer.getChar
+    ensureChunk(2)
+    filePosition += 2
+    chunkBuffer.getChar
   }
 
   def getShort: Short = {
-    if (chunk.bufferPosition + 2 > chunk.length)
-      adjustChunk
-    chunk.buffer.getShort
+    ensureChunk(2)
+    filePosition += 2
+    chunkBuffer.getShort
   }
 
   def getInt: Int = {
-    if (chunk.bufferPosition + 4 > chunk.length)
-      adjustChunk
-    chunk.buffer.getInt
+    ensureChunk(4)
+    filePosition += 4
+    chunkBuffer.getInt
   }
 
   def getFloat: Float = {
-    if (chunk.bufferPosition + 4 > chunk.length)
-      adjustChunk
-    chunk.buffer.getFloat
+    ensureChunk(4)
+    filePosition += 4
+    chunkBuffer.getFloat
   }
 
   def getDouble: Double = {
-    if (chunk.bufferPosition + 8 > chunk.length)
-      adjustChunk
-    chunk.buffer.getDouble
+    ensureChunk(8)
+    filePosition += 8
+    chunkBuffer.getDouble
   }
 
   def getLong: Long = {
-    if (chunk.bufferPosition + 8 > chunk.length)
-      adjustChunk
-    chunk.buffer.getLong
+    ensureChunk(8)
+    filePosition += 8
+    chunkBuffer.getLong
   }
-
-  private def isContained(newPosition: Long): Boolean =
-    _chunk match {
-      case Some(c) =>
-        if (newPosition >= c.offset && newPosition <= c.offset + c.length) true else false
-      case None => false
-    }
 }
 
 /** The companion object of [[StreamingByteReader]] */

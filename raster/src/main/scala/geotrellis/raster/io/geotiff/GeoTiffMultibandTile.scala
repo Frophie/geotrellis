@@ -335,7 +335,6 @@ object GeoTiffMultibandTile {
 
     apply(new ArraySegmentBytes(segmentBytes), compressor.createDecompressor, segmentLayout, options.compression, bandCount, tile.cellType)
   }
-
 }
 
 abstract class GeoTiffMultibandTile(
@@ -700,7 +699,7 @@ abstract class GeoTiffMultibandTile(
       segmentLayout,
       compression,
       bandCount,
-      cellType,
+      newCellType,
       Some(bandType),
       overviews = overviews.map(_.convert(newCellType))
     )

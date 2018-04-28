@@ -259,9 +259,13 @@ object COGLayerReader {
 
         partition flatMap { seq =>
           LayerReader.njoin[K, V](seq.toIterator, threads) { index: BigInt =>
-            if (!pathExists(keyPath(index))) Vector()
-            else {
+            if (!pathExists(keyPath(index))) {
+              println(s"The keyPath: ${keyPath(index)} for index: $index DOES NOT exist\n")
+              Vector()
+            } else {
+              println(s"The keyPath: ${keyPath(index)} for index: $index DOES exist")
               val uri = fullPath(keyPath(index))
+              println(s"This is the URI for the keyPath: $uri \n")
               val byteReader: ByteReader = uri
               val baseKey =
                 TiffTagsReader

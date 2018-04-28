@@ -51,12 +51,17 @@ class FileCOGLayerReader(
     V <: CellGrid: GeoTiffReader: ClassTag
   ](id: LayerId, tileQuery: LayerQuery[K, TileLayerMetadata[K]], numPartitions: Int) = {
 
+    println(s"This is the path to the catalog: $catalogPath")
+    println(s"This is the LayerId that is to be read: $id")
+
     val header =
       try {
         attributeStore.read[FileLayerHeader](LayerId(id.name, 0), COGAttributeStore.Fields.header)
       } catch {
         case e: AttributeNotFoundError => throw new LayerNotFoundError(id).initCause(e)
       }
+
+    println(s"This is the path to the header: ${header.path}")
 
     def getKeyPath(zoomRange: ZoomRange, maxWidth: Int): BigInt => String =
       KeyPathGenerator(header.path, s"${id.name}/${zoomRange.slug}", maxWidth) andThen (_ ++ s".$Extension")

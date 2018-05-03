@@ -469,7 +469,7 @@ class GeoTiffReaderSpec extends FunSpec
     }
 
     it("should read photometric interpretation code") {
-      val expected = Map(
+      val expected = List(
         "colormap.tif" -> ColorSpace.Palette,
         "multi-tag.tif" -> ColorSpace.RGB,
         "alaska-polar-3572.tif" -> ColorSpace.BlackIsZero,
@@ -477,8 +477,7 @@ class GeoTiffReaderSpec extends FunSpec
       )
 
       Inspectors.forEvery(expected) {
-        case (file, space) ⇒
-          MultibandGeoTiff(geoTiffPath(file)).options.colorSpace should be (space)
+        case (file, space) => MultibandGeoTiff(geoTiffPath(file)).options.colorSpace should be (space)
       }
     }
 

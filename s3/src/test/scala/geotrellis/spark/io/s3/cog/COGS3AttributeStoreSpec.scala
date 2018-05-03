@@ -14,16 +14,20 @@
  * limitations under the License.
  */
 
-package geotrellis.util
+package geotrellis.spark.io.s3.cog
 
-// --- //
+import geotrellis.spark._
+import geotrellis.spark.io._
+import geotrellis.spark.io.cog._
+import geotrellis.spark.io.s3._
+import geotrellis.spark.io.s3.testkit._
 
-/** A Functor definition that exposes its initial inner type.
-  * This allows us to impose additional (implicit) constraints
-  * on it, for instance a `SpatialComponent` that might be
-  * required on `A` within the [[map]] function.
-  */
-trait Functor[F[_], A] extends MethodExtensions[F[A]]{
-  /** Lift `f` into `F` and apply to `F[A]`. */
-  def map[B](f: A => B): F[B]
+class COGS3AttributeStoreSpec extends COGAttributeStoreSpec {
+  val bucket = "attribute-store-test-mock-bucket"
+  val prefix = "catalog"
+
+  lazy val header = S3LayerHeader("geotrellis.spark.SpatialKey", "geotrellis.raster.Tile", bucket, prefix, COGLayerType)
+  lazy val attributeStore: AttributeStore = new S3AttributeStore(bucket, prefix) {
+    override val s3Client = new MockS3Client()
+  }
 }

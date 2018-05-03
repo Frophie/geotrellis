@@ -10,7 +10,10 @@ libraryDependencies ++= Seq(
   spire,
   monocleCore, monocleMacro,
   chronoscala,
-  scalazStream,
+  catsCore,
+  catsEffect,
+  fs2Core,
+  fs2Io,
   scalatest % Test,
   logging,
   scaffeine

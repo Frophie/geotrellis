@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Azavea
+ * Copyright 2018 Azavea
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,24 +14,10 @@
  * limitations under the License.
  */
 
-package geotrellis.proj4
+package geotrellis.spark.io.hadoop.conf
 
-import java.util.concurrent.ConcurrentHashMap;
+import pureconfig.{CamelCase, ConfigFieldMapping, ProductHint}
 
-/**
- * @author Manuri Perera
- */
-@deprecated("This will be removed in 2.0", "1.2")
-class Memoize[T, R](f: T => R) extends (T => R) {
-  val map: ConcurrentHashMap[T, R] = new ConcurrentHashMap()
-
-  def apply(x: T): R = {
-    if (map.contains(x)) map.get(x)
-    else {
-      val y = f(x)
-      map.put(x, y)
-      y
-    }
-  }
+trait CamelCaseConfig {
+  implicit def hint[T]: ProductHint[T] = ProductHint[T](ConfigFieldMapping(CamelCase, CamelCase))
 }
-

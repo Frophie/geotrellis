@@ -20,6 +20,7 @@ import geotrellis.spark.io._
 import geotrellis.spark.io.avro._
 import geotrellis.spark.io.avro.codecs.KeyValueRecordCodec
 import geotrellis.spark.util.KryoWrapper
+import geotrellis.spark.io.s3.conf.S3Config
 
 import cats.effect.IO
 import cats.syntax.apply._
@@ -27,7 +28,6 @@ import com.amazonaws.services.s3.model.{AmazonS3Exception, ObjectMetadata, PutOb
 import org.apache.avro.Schema
 import org.apache.commons.io.IOUtils
 import org.apache.spark.rdd.RDD
-import com.typesafe.config.ConfigFactory
 
 import java.io.ByteArrayInputStream
 import java.util.concurrent.Executors
@@ -35,10 +35,8 @@ import java.util.concurrent.Executors
 import scala.concurrent.ExecutionContext
 import scala.reflect._
 
-
 trait S3RDDWriter {
-  final val DefaultThreadCount =
-    ConfigFactory.load().getThreads("geotrellis.s3.threads.rdd.write")
+  final val defaultThreadCount = S3Config.threads.rdd.writeThreads
 
   def getS3Client: () => S3Client
 
@@ -47,7 +45,7 @@ trait S3RDDWriter {
     bucket: String,
     keyPath: K => String,
     putObjectModifier: PutObjectRequest => PutObjectRequest = { p => p },
-    threads: Int = DefaultThreadCount
+    threads: Int = defaultThreadCount
   ): Unit = {
     update(rdd, bucket, keyPath, None, None, putObjectModifier, threads)
   }
@@ -59,7 +57,7 @@ trait S3RDDWriter {
     writerSchema: Option[Schema],
     mergeFunc: Option[(V, V) => V],
     putObjectModifier: PutObjectRequest => PutObjectRequest = { p => p },
-    threads: Int = DefaultThreadCount
+    threads: Int = defaultThreadCount
   ): Unit = {
     val codec  = KeyValueRecordCodec[K, V]
     val schema = codec.schema
@@ -95,29 +93,16 @@ trait S3RDDWriter {
 
         def elaborateRow(row: (String, Vector[(K,V)])): fs2.Stream[IO, (String, Vector[(K,V)])] = {
           fs2.Stream eval IO.shift(ec) *> IO ({
-            val (key, kvs1) = row
-            val kvs2: Vector[(K,V)] =
-              if (mergeFunc.nonEmpty) {
-                try {
-                  val bytes = IOUtils.toByteArray(s3client.getObject(bucket, key).getObjectContent)
-                  AvroEncoder.fromBinary(schema, bytes)(_recordCodec)
-                } catch {
-                  case e: AmazonS3Exception if e.getStatusCode == 404 => Vector.empty
-                }
-              } else Vector.empty
-            val kvs =
-              mergeFunc match {
-                case Some(fn) =>
-                  (kvs2 ++ kvs1)
-                    .groupBy({ case (k, _) => k })
-                    .map({ case (k, kvs) =>
-                      val vs = kvs.map({ case (_, v) => v })
-                      val v: V = vs.tail.foldLeft(vs.head)(fn)
-                      (k, v) })
-                    .toVector
-                case None => kvs1
+            val (key, current) = row
+            val updated = LayerWriter.updateRecords(mergeFunc, current, existing = {
+              try {
+                val bytes = IOUtils.toByteArray(s3client.getObject(bucket, key).getObjectContent)
+                AvroEncoder.fromBinary(schema, bytes)(_recordCodec)
+              } catch {
+                case e: AmazonS3Exception if e.getStatusCode == 404 => Vector.empty
               }
-            (key, kvs)
+            })
+            (key, updated)
           })
         }
 

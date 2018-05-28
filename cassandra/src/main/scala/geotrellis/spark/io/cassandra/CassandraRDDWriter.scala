@@ -19,6 +19,7 @@ package geotrellis.spark.io.cassandra
 import geotrellis.spark.io._
 import geotrellis.spark.io.avro._
 import geotrellis.spark.io.avro.codecs._
+import geotrellis.spark.io.cassandra.conf.CassandraConfig
 import geotrellis.spark.LayerId
 import geotrellis.spark.util.KryoWrapper
 
@@ -31,18 +32,16 @@ import cats.effect.IO
 import cats.syntax.apply._
 import org.apache.avro.Schema
 import org.apache.spark.rdd.RDD
-import com.typesafe.config.ConfigFactory
 
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 import java.math.BigInteger
 
-import scala.collection.JavaConversions._
 import scala.concurrent.ExecutionContext
+import scala.collection.JavaConversions._
 
 object CassandraRDDWriter {
-  final val DefaultThreadCount =
-    ConfigFactory.load().getThreads("geotrellis.cassandra.threads.rdd.write")
+  final val defaultThreadCount = CassandraConfig.threads.rdd.writeThreads
 
   def write[K: AvroRecordCodec, V: AvroRecordCodec](
     rdd: RDD[(K, V)],
@@ -51,7 +50,7 @@ object CassandraRDDWriter {
     decomposeKey: K => BigInt,
     keyspace: String,
     table: String,
-    threads: Int = DefaultThreadCount
+    threads: Int = defaultThreadCount
   ): Unit = update(rdd, instance, layerId, decomposeKey, keyspace, table, None, None, threads)
 
   private[cassandra] def update[K: AvroRecordCodec, V: AvroRecordCodec](
@@ -63,7 +62,7 @@ object CassandraRDDWriter {
     table: String,
     writerSchema: Option[Schema],
     mergeFunc: Option[(V,V) => V],
-    threads: Int = DefaultThreadCount
+    threads: Int = defaultThreadCount
   ): Unit = {
     implicit val sc = raster.sparkContext
 
@@ -120,27 +119,17 @@ object CassandraRDDWriter {
 
               def elaborateRow(row: (BigInt, Vector[(K,V)])): fs2.Stream[IO, (BigInt, Vector[(K,V)])] = {
                 fs2.Stream eval IO.shift(ec) *> IO ({
-                  val (key, kvs1) = row
-                  val kvs2 =
-                    if (mergeFunc.nonEmpty) {
-                      val oldRow = session.execute(readStatement.bind(key: BigInteger))
-                      if (oldRow.nonEmpty) {
-                        val bytes = oldRow.one().getBytes("value").array()
-                        AvroEncoder.fromBinary(kwWriterSchema.value.getOrElse(_recordCodec.schema), bytes)(_recordCodec)
-                      } else Vector.empty
+                  val (key, current) = row
+                  val updated = LayerWriter.updateRecords(mergeFunc, current, existing = {
+                    val oldRow = session.execute(readStatement.bind(key: BigInteger))
+                    if (oldRow.nonEmpty) {
+                      val bytes = oldRow.one().getBytes("value").array()
+                      val schema = kwWriterSchema.value.getOrElse(_recordCodec.schema)
+                      AvroEncoder.fromBinary(schema, bytes)(_recordCodec)
                     } else Vector.empty
-                  val kvs = mergeFunc match {
-                    case Some(fn) =>
-                      (kvs2 ++ kvs1)
-                        .groupBy({ case (k, v) => k })
-                        .map({ case (k, kvs) =>
-                          val vs = kvs.map({ case (_, v) => v })
-                          val v: V = vs.tail.foldLeft(vs.head)(fn)
-                          (k, v) })
-                        .toVector
-                    case None => kvs1
-                  }
-                  (key, kvs)
+                  })
+
+                  (key, updated)
                 })
               }
 

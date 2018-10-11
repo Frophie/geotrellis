@@ -17,7 +17,9 @@
 package geotrellis.spark.io.cog
 
 import geotrellis.raster._
+import geotrellis.raster.io.geotiff.GeoTiffMultibandTile
 import geotrellis.raster.io.geotiff.reader.GeoTiffReader
+import geotrellis.raster.crop._
 import geotrellis.raster.resample._
 import geotrellis.spark._
 import geotrellis.spark.io._
@@ -39,7 +41,7 @@ trait COGValueReader[ID] {
   def reader[
     K: JsonFormat : SpatialComponent : ClassTag,
     V <: CellGrid : GeoTiffReader
-  ](layerId: LayerId): Reader[K, V]
+  ](layerId: LayerId): COGReader[K, V]
 
   /** Produce a key value reader for a specific layer, prefetching layer metadata once at construction time */
   def baseReader[
@@ -50,7 +52,7 @@ trait COGValueReader[ID] {
     keyPath: (K, Int, KeyIndex[K], ZoomRange) => String, // Key, maxWidth, toIndex, zoomRange
     fullPath: String => URI,
     exceptionHandler: K => PartialFunction[Throwable, Nothing] = { key: K => { case e: Throwable => throw e }: PartialFunction[Throwable, Nothing] }
-   ): Reader[K, V] = new Reader[K, V] {
+   ): COGReader[K, V] = new COGReader[K, V] {
     val COGLayerStorageMetadata(cogLayerMetadata, keyIndexes) =
       attributeStore.readMetadata[COGLayerStorageMetadata[K]](LayerId(layerId.name, 0))
 
@@ -71,13 +73,57 @@ trait COGValueReader[ID] {
       } catch {
         case th: Throwable => exceptionHandler(key)(th)
       }
+
+    }
+
+    def readSubsetBands(key: K, bands: Seq[Int]): Array[Option[Tile]] = {
+      val (zoomRange, spatialKey, overviewIndex, gridBounds) =
+        cogLayerMetadata.getReadDefinition(key.getComponent[SpatialKey], layerId.zoom)
+
+      val baseKeyIndex = keyIndexes(zoomRange)
+
+      val maxWidth = Index.digits(baseKeyIndex.toIndex(baseKeyIndex.keyBounds.maxKey))
+      val uri = fullPath(keyPath(key.setComponent(spatialKey), maxWidth, baseKeyIndex, zoomRange))
+
+      val sourceGeoTiff = GeoTiffReader.readMultiband(uri, streaming = true)
+      val sourceTile = sourceGeoTiff.getOverview(overviewIndex).tile
+
+      // We first must determine which bands are valid and which are not
+      // before doing the crop in order to avoid band subsetting errors
+      // and/or loading unneeded data.
+      val targetBandsWithIndex: Array[(Int, Int)] =
+        bands
+          .zipWithIndex
+          .filter { case (band, _) =>
+            band >= 0 && band < sourceGeoTiff.bandCount
+          }
+          .toArray
+
+      val (targetBands, targetBandsIndexes) = targetBandsWithIndex.unzip
+
+      val croppedTiles: Array[Tile] =
+        try {
+          sourceTile.cropBands(gridBounds, targetBands).bands.toArray
+        } catch {
+          case th: Throwable => exceptionHandler(key)(th)
+        }
+
+      val croppedTilesWithBandIndexes: Array[(Int, Tile)] = targetBandsIndexes.zip(croppedTiles)
+
+      val returnedBands = Array.fill[Option[Tile]](bands.size)(None)
+
+      for ((index, band) <- croppedTilesWithBandIndexes) {
+        returnedBands(index) = Some(band)
+      }
+
+      returnedBands
     }
   }
 
   def overzoomingReader[
     K: JsonFormat: SpatialComponent: ClassTag,
     V <: CellGrid: GeoTiffReader: ? => TileResampleMethods[V]
-  ](layerId: ID, resampleMethod: ResampleMethod = ResampleMethod.DEFAULT): Reader[K, V]
+  ](layerId: ID, resampleMethod: ResampleMethod = ResampleMethod.DEFAULT): COGReader[K, V]
 }
 
 object COGValueReader {

@@ -32,7 +32,13 @@ import scala.collection.mutable
   * @param storageMethod      Storage method used for the segments (tiled or striped)
   * @param interleaveMethod   The interleave method used for segments (pixel or band)
   */
-case class GeoTiffSegmentLayout(totalCols: Int, totalRows: Int, tileLayout: TileLayout, storageMethod: StorageMethod, interleaveMethod: InterleaveMethod) {
+case class GeoTiffSegmentLayout(
+  totalCols: Int,
+  totalRows: Int,
+  tileLayout: TileLayout,
+  storageMethod: StorageMethod,
+  interleaveMethod: InterleaveMethod
+) {
   def isTiled: Boolean =
     storageMethod match {
       case _: Tiled => true
@@ -84,7 +90,7 @@ case class GeoTiffSegmentLayout(totalCols: Int, totalRows: Int, tileLayout: Tile
 
     def addToPartition(window: GridBounds) {
       partition += window
-      partitionSize += window.sizeLong
+      partitionSize += window.size
       partitionCount += 1
     }
 
@@ -99,7 +105,7 @@ case class GeoTiffSegmentLayout(totalCols: Int, totalRows: Int, tileLayout: Tile
       }.sortBy(_._2)
 
     for ((window, _) <- sorted) {
-      if ((partitionCount == 0) || (partitionSize + window.sizeLong) < maxPartitionSize) {
+      if ((partitionCount == 0) || (partitionSize + window.size) < maxPartitionSize) {
         addToPartition(window)
       } else {
         finalizePartition()

@@ -25,7 +25,7 @@ import geotrellis.raster.io.geotiff.tags._
 import geotrellis.raster.io.geotiff.util._
 import geotrellis.vector.Extent
 import geotrellis.proj4.CRS
-import geotrellis.util.{ByteReader, Filesystem}
+import geotrellis.util.{ByteReader, Filesystem, FileRangeReader, StreamingByteReader}
 import geotrellis.raster.io.geotiff.tags.codes.ColorSpace
 import geotrellis.raster.render.IndexedColorMap
 import monocle.syntax.apply._
@@ -68,9 +68,9 @@ object GeoTiffReader {
     val ovrPathExists = new File(ovrPath).isFile
     if (streaming)
       readSingleband(
-        Filesystem.toMappedByteBuffer(path),
+        StreamingByteReader(FileRangeReader(path)),
         streaming, true,
-        if(ovrPathExists) Some(Filesystem.toMappedByteBuffer(ovrPath)) else None
+        if(ovrPathExists) Some(StreamingByteReader(FileRangeReader(ovrPath))) else None
       )
     else
       readSingleband(
@@ -170,9 +170,9 @@ object GeoTiffReader {
     val ovrPathExists = new File(ovrPath).isFile
     if (streaming)
       readMultiband(
-        Filesystem.toMappedByteBuffer(path),
+        StreamingByteReader(FileRangeReader(path)),
         streaming, true,
-        if(ovrPathExists) Some(Filesystem.toMappedByteBuffer(ovrPath)) else None
+        if(ovrPathExists) Some(StreamingByteReader(FileRangeReader(ovrPath))) else None
       )
     else
       readMultiband(
@@ -319,6 +319,12 @@ object GeoTiffReader {
     def getOverviewsCount: Int = overviews.length
     def getOverview(idx: Int): GeoTiffInfo = overviews(idx)
   }
+
+  def readGeoTiffInfo(
+    byteReader: ByteReader,
+    streaming: Boolean,
+    withOverviews: Boolean
+  ): GeoTiffInfo = readGeoTiffInfo(byteReader, streaming, withOverviews, None)
 
   def readGeoTiffInfo(
     byteReader: ByteReader,

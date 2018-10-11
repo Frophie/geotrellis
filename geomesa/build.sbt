@@ -2,12 +2,14 @@ import Dependencies._
 
 name := "geotrellis-geomesa"
 libraryDependencies ++= Seq(
-  "org.locationtech.geomesa" % "geomesa-jobs" % Version.geomesa,
-  "org.locationtech.geomesa" % "geomesa-accumulo-datastore" % Version.geomesa,
-  "org.locationtech.geomesa" % "geomesa-utils" % Version.geomesa,
+  "org.locationtech.geomesa" %% "geomesa-jobs" % Version.geomesa,
+  "org.locationtech.geomesa" %% "geomesa-accumulo-jobs" % Version.geomesa,
+  "org.locationtech.geomesa" %% "geomesa-accumulo-datastore" % Version.geomesa,
+  "org.locationtech.geomesa" %% "geomesa-utils" % Version.geomesa,
   sparkCore % Provided,
   spire,
-  scalatest % Test
+  scalatest % Test,
+  sparkSQL % Test
 )
 
 resolvers ++= Seq(

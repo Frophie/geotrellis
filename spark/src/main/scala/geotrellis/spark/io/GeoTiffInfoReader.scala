@@ -33,9 +33,8 @@ import java.net.URI
 
 
 private [geotrellis] trait GeoTiffInfoReader extends LazyLogging {
-  def geoTiffInfoRdd(implicit sc: SparkContext): RDD[String]
+  def geoTiffInfoRDD(implicit sc: SparkContext): RDD[String]
   def getGeoTiffInfo(uri: String): GeoTiffInfo
-  def getGeoTiffTags(uri: String): TiffTags
 
   def getSegmentLayoutTransform(geoTiffInfo: GeoTiffInfo): GeoTiffSegmentLayoutTransform =
     GeoTiffSegmentLayoutTransform(geoTiffInfo.segmentLayout, geoTiffInfo.bandCount)

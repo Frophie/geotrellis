@@ -35,7 +35,7 @@ case class HadoopGeoTiffInfoReader(
 ) extends GeoTiffInfoReader {
 
   /** Returns RDD of URIs to tiffs as GeoTiffInfo is not serializable. */
-  def geoTiffInfoRdd(implicit sc: SparkContext): RDD[String] = {
+  def geoTiffInfoRDD(implicit sc: SparkContext): RDD[String] = {
     sc.parallelize(
       HdfsUtils
         .listFiles(new Path(path), config.value)
@@ -51,10 +51,5 @@ case class HadoopGeoTiffInfoReader(
       if (HdfsUtils.pathExists(ovrPath, config.value)) Some(HdfsRangeReader(ovrPath, config.value)) else None
 
     GeoTiffReader.readGeoTiffInfo(rr, streaming, true, ovrReader)
-  }
-
-  def getGeoTiffTags(uri: String): TiffTags = {
-    val rr = HdfsRangeReader(new Path(uri), config.value)
-    TiffTags(rr)
   }
 }

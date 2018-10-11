@@ -28,11 +28,32 @@ object RasterExamples {
         val x = point.x
         val y = point.y
         if(rasterExtent.extent.intersects(x,y)) {
-          val index = rasterExtent.mapXToGrid(x) * cols + rasterExtent.mapYToGrid(y)
+          val index = rasterExtent.mapXToGrid(x) + rasterExtent.mapYToGrid(y) * cols
           array(index) = array(index) + 1
         }
       }
       IntArrayTile(array, cols, rows)
+    }
+  }
+
+  def `Counting polygon features in raster cells (rasterize operation)`: Unit = {
+    import geotrellis.raster._
+    import geotrellis.vector._
+
+    def countPolygon(features: Seq[PolygonFeature[Int]], rasterExtent: RasterExtent): MultibandTile = {
+      // Assumes the polygon features have 5 classes
+
+      val (cols, rows) = (rasterExtent.cols, rasterExtent.rows)
+      val bands = Array.fill(5) { IntArrayTile.ofDim(cols, rows) }
+      for(Feature(polygon, classId) <- features) {
+        val targetBand = bands(classId)
+        // Use the 'foreach' method exension to rasterize the polygon over the raster extent.
+        rasterExtent.foreach(polygon) { (col, row) =>
+          targetBand.set(col, row, targetBand.get(col, row) + 1)
+        }
+      }
+
+      MultibandTile(bands)
     }
   }
 }

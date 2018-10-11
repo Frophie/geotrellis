@@ -84,6 +84,7 @@ trait GeoTiff[T <: CellGrid] extends GeoTiffData {
   def getOverview(idx: Int): GeoTiff[T] = if(idx < 0) this else overviews(idx)
   def buildOverview(resampleMethod: ResampleMethod, decimationFactor: Int, blockSize: Int = GeoTiff.DefaultBlockSize): GeoTiff[T]
   def withOverviews(resampleMethod: ResampleMethod, decimations: List[Int] = Nil, blockSize: Int = GeoTiff.DefaultBlockSize): GeoTiff[T]
+  def withOverviews(overviews: Seq[GeoTiff[T]]): GeoTiff[T] = copy(overviews = overviews.toList)
 
   /** Chooses the best matching overviews and makes resample */
   def resample(rasterExtent: RasterExtent, resampleMethod: ResampleMethod, strategy: OverviewStrategy): Raster[T]
@@ -101,22 +102,22 @@ trait GeoTiff[T <: CellGrid] extends GeoTiffData {
   def crop(windows: Seq[GridBounds]): Iterator[(GridBounds, T)]
 
   /** Return the best matching overview to the given cellSize, returns "this" if no overviews available. */
-  private[geotrellis] def getClosestOverview(cellSize: CellSize, strategy: OverviewStrategy): GeoTiff[T] = {
+  def getClosestOverview(cellSize: CellSize, strategy: OverviewStrategy = AutoHigherResolution): GeoTiff[T] = {
     overviews match {
       case Nil => this
       case list =>
         strategy match {
           case AutoHigherResolution =>
             (this :: list) // overviews can have erased extent information
-              .map { v => (v.cellSize.resolution - cellSize.resolution) -> v }
+              .map { v => (cellSize.resolution - v.cellSize.resolution) -> v }
               .filter(_._1 >= 0)
               .sortBy(_._1)
               .map(_._2)
               .headOption
               .getOrElse(this)
           case Auto(n) =>
-            list
-              .sortBy(v => math.abs(v.cellSize.resolution - cellSize.resolution))
+            (this :: list) // overviews can have erased extent information
+              .sortBy(v => math.abs(cellSize.resolution - v.cellSize.resolution))
               .lift(n)
               .getOrElse(this) // n can be out of bounds,
           // makes only overview lookup as overview position is important

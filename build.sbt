@@ -57,7 +57,7 @@ lazy val commonSettings = Seq(
     .map(Credentials(_)),
 
   addCompilerPlugin("org.spire-math" % "kind-projector" % "0.9.4" cross CrossVersion.binary),
-  addCompilerPlugin("org.scalamacros" %% "paradise" % "2.1.0" cross CrossVersion.full),
+  addCompilerPlugin("org.scalamacros" %% "paradise" % "2.1.1" cross CrossVersion.full),
 
   pomExtra := (
     <developers>
@@ -261,7 +261,7 @@ lazy val util = project
   .settings(commonSettings)
 
 lazy val `doc-examples` = project
-  .dependsOn(spark, s3, accumulo, cassandra, hbase, spark, `spark-testkit`)
+  .dependsOn(spark, s3, accumulo, cassandra, hbase, spark, `spark-testkit`, `spark-pipeline`)
   .settings(commonSettings)
 
 lazy val bench = project

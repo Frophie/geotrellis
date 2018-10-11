@@ -113,8 +113,9 @@ class GeoTiffMultibandTileSpec extends FunSpec
           band3
         )
 
-      val gtm = GeoTiffMultibandTile(original, GeoTiffOptions(Tiled(16, 16)))
-      val geoTiff = MultibandGeoTiff(gtm, Extent(100.0, 40.0, 120.0, 42.0), LatLng)
+      val options = GeoTiffOptions(Tiled(16, 16))
+      val gtm = GeoTiffMultibandTile(original, options)
+      val geoTiff = MultibandGeoTiff(gtm, Extent(100.0, 40.0, 120.0, 42.0), LatLng, options = options)
       geoTiff.write(path)
 
       addToPurge(path)
@@ -128,6 +129,8 @@ class GeoTiffMultibandTileSpec extends FunSpec
   }
 
   describe("Multiband cellType conversion") {
+    val tiff = MultibandGeoTiff(geoTiffPath("3bands/int32/3bands-tiled-pixel.tif"))
+
     it("should convert the cellType with convert") {
       val actual =
         MultibandGeoTiff(geoTiffPath("3bands/int32/3bands-striped-pixel.tif")).tile.convert(UShortCellType)
@@ -136,6 +139,20 @@ class GeoTiffMultibandTileSpec extends FunSpec
         MultibandGeoTiff(geoTiffPath("3bands/int32/3bands-striped-pixel.tif")).tile.toArrayTile.convert(UShortCellType)
 
       assertEqual(expected, actual)
+    }
+
+    it("should convert to the ShortCellType correctly") {
+      val expected = MultibandGeoTiff(geoTiffPath("3bands/int16/3bands-tiled-pixel.tif"))
+      val actual = tiff.tile.convert(ShortCellType)
+
+      assertEqual(expected.tile, actual.tile)
+    }
+
+    it("should convert to the UShortCellType correctly") {
+      val expected = MultibandGeoTiff(geoTiffPath("3bands/uint16/3bands-tiled-pixel.tif"))
+      val actual = tiff.tile.convert(UShortCellType)
+
+      assertEqual(expected.tile, actual.tile)
     }
 
     it("should convert the cellType with interpretAs") {
@@ -717,6 +734,57 @@ class GeoTiffMultibandTileSpec extends FunSpec
         case (b0, b1, b2, b3, b4, b5, b6, b7, b8, b9) => b0 + b1 + b2 + b3 + b4 + b5 + b6 + b7 + b8 + b9
       }
       combineAssert(combined, arity)
+    }
+  }
+
+  describe("GeoTiffMultibandTile crop") {
+    val pixelStripedGeoTiff = GeoTiffReader.readMultiband(geoTiffPath("3bands/int32/3bands-striped-pixel.tif"))
+    val pixelTiledGeoTiff = GeoTiffReader.readMultiband(geoTiffPath("3bands/int32/3bands-tiled-pixel.tif"))
+
+    val bandStripedGeoTiff = GeoTiffReader.readMultiband(geoTiffPath("3bands/int32/3bands-striped-band.tif"))
+    val bandTiledGeoTiff = GeoTiffReader.readMultiband(geoTiffPath("3bands/int32/3bands-tiled-band.tif"))
+
+    val pixelStripedRasterExtent = RasterExtent(pixelStripedGeoTiff.extent, pixelStripedGeoTiff.cols, pixelStripedGeoTiff.rows)
+    val bandStripedRasterExtent = RasterExtent(bandStripedGeoTiff.extent, bandStripedGeoTiff.cols, bandStripedGeoTiff.rows)
+
+    it("should have the correct number of subset bands - pixel") {
+      val cropped = pixelStripedGeoTiff.tile.cropBands(pixelStripedRasterExtent.gridBounds, Array(1, 0))
+
+      cropped.bands.size should be (2)
+    }
+
+    it("should have the correct number of subset bands - band") {
+      val cropped = bandStripedGeoTiff.tile.cropBands(bandStripedRasterExtent.gridBounds, Array(1))
+
+      cropped.bands.size should be (1)
+    }
+
+    it("should have the crop the correct area - pixel striped") {
+      val actual = pixelStripedGeoTiff.tile.cropBands(pixelStripedRasterExtent.gridBounds, Array(1, 0, 2))
+      val expected = pixelStripedGeoTiff.crop(pixelStripedRasterExtent.gridBounds).tile.subsetBands(1, 0, 2)
+
+      actual should be (expected)
+    }
+
+    it("should have the crop the correct area - pixel tiled") {
+      val actual = pixelTiledGeoTiff.tile.cropBands(pixelStripedRasterExtent.gridBounds, Array(1, 0, 2))
+      val expected = pixelTiledGeoTiff.crop(pixelStripedRasterExtent.gridBounds).tile.subsetBands(1, 0, 2)
+
+      actual should be (expected)
+    }
+
+    it("should have the crop the correct area - band striped") {
+      val actual = bandStripedGeoTiff.tile.cropBands(bandStripedRasterExtent.gridBounds, Array(1, 2, 0))
+      val expected = bandStripedGeoTiff.crop(bandStripedRasterExtent.gridBounds).tile.subsetBands(1, 2, 0)
+
+      actual should be (expected)
+    }
+
+    it("should have the crop the correct area - band tiled") {
+      val actual = bandTiledGeoTiff.tile.cropBands(bandStripedRasterExtent.gridBounds, Array(1, 2, 0))
+      val expected = bandTiledGeoTiff.crop(bandStripedRasterExtent.gridBounds).tile.subsetBands(1, 2, 0)
+
+      actual should be (expected)
     }
   }
 

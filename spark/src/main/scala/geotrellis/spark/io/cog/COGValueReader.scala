@@ -17,7 +17,6 @@
 package geotrellis.spark.io.cog
 
 import geotrellis.raster._
-import geotrellis.raster.io.geotiff.GeoTiffMultibandTile
 import geotrellis.raster.io.geotiff.reader.GeoTiffReader
 import geotrellis.raster.crop._
 import geotrellis.raster.resample._
@@ -133,8 +132,9 @@ object COGValueReader {
    * Find instances of [[COGValueReaderProvider]] through Java SPI.
    */
   def apply(attributeStore: AttributeStore, valueReaderUri: URI): COGValueReader[LayerId] = {
-    import scala.collection.JavaConversions._
-    ServiceLoader.load(classOf[COGValueReaderProvider]).iterator()
+    import scala.collection.JavaConverters._
+    ServiceLoader.load(classOf[COGValueReaderProvider])
+      .iterator().asScala
       .find(_.canProcess(valueReaderUri))
       .getOrElse(throw new RuntimeException(s"Unable to find COGValueReaderProvider for $valueReaderUri"))
       .valueReader(valueReaderUri, attributeStore)

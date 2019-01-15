@@ -38,7 +38,7 @@ import java.util.concurrent.Executors
 import java.math.BigInteger
 
 import scala.concurrent.ExecutionContext
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 object CassandraRDDWriter {
   final val defaultThreadCount = CassandraConfig.threads.rdd.writeThreads
@@ -116,13 +116,14 @@ object CassandraRDDWriter {
 
               val pool = Executors.newFixedThreadPool(threads)
               implicit val ec = ExecutionContext.fromExecutor(pool)
+              implicit val cs = IO.contextShift(ec)
 
               def elaborateRow(row: (BigInt, Vector[(K,V)])): fs2.Stream[IO, (BigInt, Vector[(K,V)])] = {
                 fs2.Stream eval IO.shift(ec) *> IO ({
                   val (key, current) = row
                   val updated = LayerWriter.updateRecords(mergeFunc, current, existing = {
                     val oldRow = session.execute(readStatement.bind(key: BigInteger))
-                    if (oldRow.nonEmpty) {
+                    if (oldRow.asScala.nonEmpty) {
                       val bytes = oldRow.one().getBytes("value").array()
                       val schema = kwWriterSchema.value.getOrElse(_recordCodec.schema)
                       AvroEncoder.fromBinary(schema, bytes)(_recordCodec)
@@ -148,8 +149,11 @@ object CassandraRDDWriter {
                 })
               }
 
-              val results = (rows flatMap elaborateRow flatMap rowToBytes map retire)
-                .join(threads)
+              val results = rows
+                .flatMap(elaborateRow)
+                .flatMap(rowToBytes)
+                .map(retire)
+                .parJoin(threads)
                 .onComplete {
                   fs2.Stream eval IO.shift(ec) *> IO {
                     session.closeAsync()

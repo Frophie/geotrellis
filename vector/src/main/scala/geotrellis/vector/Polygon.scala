@@ -16,13 +16,13 @@
 
 package geotrellis.vector
 
-import com.vividsolutions.jts.geom.{CoordinateSequence, LinearRing, TopologyException}
-import com.vividsolutions.jts.operation.union._
-import com.vividsolutions.jts.{geom => jts}
+import org.locationtech.jts.geom.{CoordinateSequence, LinearRing, TopologyException}
+import org.locationtech.jts.operation.union._
+import org.locationtech.jts.{geom => jts}
 import geotrellis.vector.GeomFactory._
 
 import scala.collection.GenTraversable
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 object Polygon {
   implicit def jtsToPolygon(jtsGeom: jts.Polygon): Polygon =
@@ -85,7 +85,7 @@ case class Polygon(jtsGeom: jts.Polygon) extends Geometry
 
   /** Returns a unique representation of the geometry based on standard coordinate ordering. */
   def normalized(): Polygon = {
-    val geom = jtsGeom.clone.asInstanceOf[jts.Polygon]
+    val geom = jtsGeom.copy.asInstanceOf[jts.Polygon]
     geom.normalize
     Polygon(geom)
   }
@@ -100,12 +100,12 @@ case class Polygon(jtsGeom: jts.Polygon) extends Geometry
 
   /** Returns the exterior ring of this Polygon. */
   lazy val exterior: Line =
-    Line(jtsGeom.getExteriorRing.clone.asInstanceOf[jts.LineString])
+    Line(jtsGeom.getExteriorRing.copy.asInstanceOf[jts.LineString])
 
   /** Returns the hole rings of this Polygon. */
   lazy val holes: Array[Line] = {
     for (i <- 0 until numberOfHoles) yield
-      Line(jtsGeom.getInteriorRingN(i).clone.asInstanceOf[jts.LineString])
+      Line(jtsGeom.getInteriorRingN(i).copy.asInstanceOf[jts.LineString])
   }.toArray
 
   /** Returns true if this Polygon contains holes */
@@ -277,9 +277,9 @@ case class Polygon(jtsGeom: jts.Polygon) extends Geometry
    */
   def union(g: TwoDimensions): TwoDimensionsTwoDimensionsUnionResult = g match {
     case p:Polygon =>
-      new CascadedPolygonUnion(Seq(this, p).map(_.jtsGeom)).union
+      new CascadedPolygonUnion(Seq(this, p).map(_.jtsGeom).asJava).union
     case mp:MultiPolygon =>
-      new CascadedPolygonUnion((this +: mp.polygons).map(_.jtsGeom).toSeq).union
+      new CascadedPolygonUnion((this +: mp.polygons).map(_.jtsGeom).toSeq.asJava).union
     case _ =>
       jtsGeom.union(g.jtsGeom)
   }

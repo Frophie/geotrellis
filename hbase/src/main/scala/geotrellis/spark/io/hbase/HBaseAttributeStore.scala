@@ -26,7 +26,7 @@ import org.apache.hadoop.hbase.util.Bytes
 import spray.json._
 import spray.json.DefaultJsonProtocol._
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 object HBaseAttributeStore {
   def apply(instance: HBaseInstance): HBaseAttributeStore =
@@ -42,9 +42,8 @@ class HBaseAttributeStore(val instance: HBaseInstance, val attributeTable: Strin
   //create the attribute table if it does not exist
   instance.withAdminDo { admin =>
     if (!admin.tableExists(attributeTableName)) {
-      val tableDesc = new HTableDescriptor(attributeTableName)
-      val headerColumnFamilyDesc = new HColumnDescriptor(AttributeStore.Fields.header)
-      tableDesc.addFamily(headerColumnFamilyDesc)
+      val headerColumnFamilyDesc = ColumnFamilyDescriptorBuilder.of(AttributeStore.Fields.header)
+      val tableDesc = TableDescriptorBuilder.newBuilder(attributeTableName).setColumnFamily(headerColumnFamilyDesc).build()
       admin.createTable(tableDesc)
     }
   }
@@ -54,12 +53,12 @@ class HBaseAttributeStore(val instance: HBaseInstance, val attributeTable: Strin
   def layerIdString(layerId: LayerId): String = s"${layerId.name}${SEP}${layerId.zoom}"
 
   private def addColumn(table: Table)(cf: String) =
-    if(!table.getTableDescriptor.hasFamily(cf))
-      instance.getAdmin.addColumn(attributeTableName, new HColumnDescriptor(cf))
+    if (!table.getDescriptor.hasColumnFamily(cf))
+      instance.getAdmin.addColumnFamily(attributeTableName, ColumnFamilyDescriptorBuilder.of(cf))
 
   private def fetch(layerId: Option[LayerId], attributeName: String): Vector[Result] =
     instance.withTableConnectionDo(attributeTableName) { table =>
-      if (table.getTableDescriptor.hasFamily(attributeName)) {
+      if (table.getDescriptor.hasColumnFamily(attributeName)) {
         val scan = new Scan()
         layerId.foreach { id =>
           scan.withStartRow(layerIdString(id), true)
@@ -67,7 +66,7 @@ class HBaseAttributeStore(val instance: HBaseInstance, val attributeTable: Strin
         }
         scan.addFamily(attributeName)
         val scanner = table.getScanner(scan)
-        try scanner.iterator().toVector finally scanner.close()
+        try scanner.iterator().asScala.toVector finally scanner.close()
       } else Vector()
     }
 
@@ -79,7 +78,10 @@ class HBaseAttributeStore(val instance: HBaseInstance, val attributeTable: Strin
 
       attributeName match {
         case Some(attribute) =>
-          table.getTableDescriptor.removeFamily(attribute)
+          TableDescriptorBuilder
+            .newBuilder(table.getDescriptor)
+            .removeColumnFamily(attribute)
+            .build()
           clearCache(layerId, attribute)
         case None =>
           clearCache(layerId)
@@ -127,17 +129,16 @@ class HBaseAttributeStore(val instance: HBaseInstance, val attributeTable: Strin
   def layerIds: Seq[LayerId] = instance.withTableConnectionDo(attributeTableName) { table =>
     val scanner = table.getScanner(new Scan())
     try {
-      scanner.iterator()
-        .map { kv: Result =>
-          val List(name, zoomStr) = Bytes.toString(kv.getRow).split(SEP).toList
-          LayerId(name, zoomStr.toInt)
-        }
+      scanner.iterator().asScala.map { kv: Result =>
+        val List(name, zoomStr) = Bytes.toString(kv.getRow).split(SEP).toList
+        LayerId(name, zoomStr.toInt)
+      }
         .toList
         .distinct
     } finally scanner.close()
   }
 
   def availableAttributes(layerId: LayerId): Seq[String] = instance.withTableConnectionDo(attributeTableName) {
-    _.getTableDescriptor.getFamiliesKeys.map(Bytes.toString).toSeq
+    _.getDescriptor.getColumnFamilyNames.asScala.map(Bytes.toString).toSeq
   }
 }

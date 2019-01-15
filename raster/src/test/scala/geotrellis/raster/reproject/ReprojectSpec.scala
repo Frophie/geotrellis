@@ -167,8 +167,8 @@ class ReprojectSpec extends FunSpec
       val RasterExtent(_, cellwidthLeft, cellheightLeft, _, _) = RasterExtent(wmLeftExtent, wmLeftTile.cols, wmLeftTile.rows)
       val RasterExtent(_, cellwidthRight, cellheightRight, _, _) = RasterExtent(wmRightExtent, wmRightTile.cols, wmRightTile.rows)
 
-      cellwidthLeft should be (cellwidthRight +- 0.01)
-      cellheightLeft should be (cellheightRight +- 0.01)
+      cellwidthLeft should be (cellwidthRight +- 0.05)
+      cellheightLeft should be (cellheightRight +- 0.05)
 
       // Specifically fit it ito a web mercator zoom layout tile
       val re = RasterExtent(Extent(-8247861.100, 4872401.931, -8238077.160, 4882185.871), 256, 256)
@@ -225,7 +225,7 @@ class ReprojectSpec extends FunSpec
       val resultRegular = srcRaster.reproject(destCRS)
       val resultOptions = srcRaster.reproject(destCRS, options)
 
-      resultRegular.rasterExtent should be (resultOptions.rasterExtent)
+      resultRegular.raster.rasterExtent should be (resultOptions.raster.rasterExtent)
     }
 
     it("should do a resample into a different CRS") {
@@ -248,7 +248,7 @@ class ReprojectSpec extends FunSpec
       val resultRegular = srcRaster.reproject(destCRS).raster.resample(destExtent2)
       val resultOptions = srcRaster.reproject(destCRS, options)
 
-      resultRegular.rasterExtent should be (resultOptions.rasterExtent)
+      resultRegular.rasterExtent should be (resultOptions.raster.rasterExtent)
     }
 
     it("should do a windowed resample into a different CRS") {

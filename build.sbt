@@ -9,6 +9,7 @@ scalaVersion in ThisBuild := Version.scala
 lazy val commonSettings = Seq(
   version := Version.geotrellis,
   scalaVersion := Version.scala,
+  crossScalaVersions := Version.crossScala,
   description := Info.description,
   organization := "org.locationtech.geotrellis",
   licenses := Seq("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0.html")),
@@ -56,7 +57,7 @@ lazy val commonSettings = Seq(
     .filter(_.asFile.canRead)
     .map(Credentials(_)),
 
-  addCompilerPlugin("org.spire-math" % "kind-projector" % "0.9.4" cross CrossVersion.binary),
+  addCompilerPlugin("org.spire-math" % "kind-projector" % "0.9.8" cross CrossVersion.binary),
   addCompilerPlugin("org.scalamacros" %% "paradise" % "2.1.1" cross CrossVersion.full),
 
   pomExtra := (
@@ -74,7 +75,6 @@ lazy val commonSettings = Seq(
     </developers>),
 
   shellPrompt := { s => Project.extract(s).currentProject.id + " > " },
-  dependencyUpdatesFilter := moduleFilter(organization = "org.scala-lang"),
   resolvers ++= Seq(
     "geosolutions" at "http://maven.geo-solutions.it/",
     "osgeo" at "http://download.osgeo.org/webdav/geotools/"
@@ -140,14 +140,17 @@ lazy val root = Project("geotrellis", file(".")).
 
 lazy val macros = project
   .settings(commonSettings)
+  .settings(Settings.macros)
 
 lazy val vectortile = project
   .dependsOn(vector)
   .settings(commonSettings)
+  .settings(Settings.vectortile)
 
 lazy val vector = project
   .dependsOn(proj4, util)
   .settings(commonSettings)
+  .settings(Settings.vector)
   .settings(
     unmanagedClasspath in Test ++= (fullClasspath in (LocalProject("vector-testkit"), Compile)).value
   )
@@ -155,14 +158,17 @@ lazy val vector = project
 lazy val `vector-testkit` = project
   .dependsOn(raster % Provided, vector % Provided)
   .settings(commonSettings)
+  .settings(Settings.`vector-testkit`)
 
 lazy val proj4 = project
   .settings(commonSettings)
+  .settings(Settings.proj4)
   .settings(javacOptions ++= Seq("-encoding", "UTF-8"))
 
 lazy val raster = project
   .dependsOn(util, macros, vector)
   .settings(commonSettings)
+  .settings(Settings.raster)
   .settings(
     unmanagedClasspath in Test ++= (fullClasspath in (LocalProject("raster-testkit"), Compile)).value
   )
@@ -173,14 +179,18 @@ lazy val raster = project
 lazy val `raster-testkit` = project
   .dependsOn(raster % Provided, vector % Provided)
   .settings(commonSettings)
+  .settings(Settings.`raster-testkit`)
 
 lazy val slick = project
   .dependsOn(vector)
   .settings(commonSettings)
+  .settings(Settings.slick)
+  .settings(crossScalaVersions := Seq(scalaVersion.value))
 
 lazy val spark = project
   .dependsOn(util, raster, `raster-testkit` % Test, `vector-testkit` % Test)
   .settings(commonSettings)
+  .settings(Settings.spark)
   .settings(
     // This takes care of a pseudo-cyclic dependency between the `spark` test scope, `spark-testkit`,
     // and `spark` main (compile) scope. sbt is happy with this. IntelliJ requires that `spark-testkit`
@@ -191,6 +201,7 @@ lazy val spark = project
 lazy val `spark-testkit` = project
   .dependsOn(`raster-testkit`, spark)
   .settings(commonSettings)
+  .settings(Settings.`spark-testkit`)
 
 lazy val s3 = project
   .dependsOn(
@@ -198,6 +209,7 @@ lazy val s3 = project
     `spark-testkit` % Test
   )
   .settings(commonSettings)
+  .settings(Settings.s3)
   .settings(
     unmanagedClasspath in Test ++= (fullClasspath in (LocalProject("s3-testkit"), Compile)).value
   )
@@ -205,6 +217,7 @@ lazy val s3 = project
 lazy val `s3-testkit` = project
   .dependsOn(s3, spark)
   .settings(commonSettings)
+  .settings(Settings.`s3-testkit`)
 
 lazy val accumulo = project
   .dependsOn(
@@ -212,6 +225,7 @@ lazy val accumulo = project
     `spark-testkit` % Test
   )
   .settings(commonSettings)
+  .settings(Settings.accumulo)
 
 lazy val cassandra = project
   .dependsOn(
@@ -219,6 +233,7 @@ lazy val cassandra = project
     `spark-testkit` % Test
   )
   .settings(commonSettings)
+  .settings(Settings.cassandra)
 
 lazy val hbase = project
   .dependsOn(
@@ -226,25 +241,31 @@ lazy val hbase = project
     `spark-testkit` % Test
   )
   .settings(commonSettings) // HBase depends on its own protobuf version
+  .settings(Settings.hbase)
   .settings(projectDependencies := { Seq((projectID in spark).value.exclude("com.google.protobuf", "protobuf-java")) })
 
 lazy val `spark-etl` = Project(id = "spark-etl", base = file("spark-etl")).
   dependsOn(spark, s3, accumulo, cassandra, hbase).
   settings(commonSettings)
+  .settings(Settings.`spark-etl`)
 
 lazy val `spark-pipeline` = Project(id = "spark-pipeline", base = file("spark-pipeline")).
   dependsOn(spark, s3, `spark-testkit` % "test").
   settings(commonSettings)
+  .settings(Settings.`spark-pipeline`)
 
 lazy val geotools = project
   .dependsOn(raster, vector, proj4, `vector-testkit` % Test, `raster-testkit` % Test,
     `raster` % "test->test" // <-- to get rid  of this, move `GeoTiffTestUtils` to the testkit.
   )
   .settings(commonSettings)
+  .settings(Settings.geotools)
 
 lazy val geomesa = project
   .dependsOn(`spark-testkit` % Test, spark, geotools, accumulo)
   .settings(commonSettings)
+  .settings(Settings.geomesa)
+  .settings(crossScalaVersions := Seq(scalaVersion.value))
 
 lazy val geowave = project
   .dependsOn(
@@ -252,18 +273,24 @@ lazy val geowave = project
     `spark-testkit` % Test, geotools, accumulo
   )
   .settings(commonSettings)
+  .settings(Settings.geowave)
+  .settings(crossScalaVersions := Seq(scalaVersion.value))
 
 lazy val shapefile = project
   .dependsOn(raster, `raster-testkit` % Test)
   .settings(commonSettings)
+  .settings(Settings.shapefile)
 
 lazy val util = project
   .settings(commonSettings)
+  .settings(Settings.util)
 
 lazy val `doc-examples` = project
   .dependsOn(spark, s3, accumulo, cassandra, hbase, spark, `spark-testkit`, `spark-pipeline`)
   .settings(commonSettings)
+  .settings(Settings.`doc-examples`)
 
 lazy val bench = project
   .dependsOn(spark)
   .settings(commonSettings)
+  .settings(Settings.bench)

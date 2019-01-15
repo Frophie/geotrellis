@@ -18,10 +18,7 @@ package geotrellis
 
 import geotrellis.util.MethodExtensions
 
-import com.vividsolutions.jts.{geom => jts}
-
-import scala.collection.mutable
-import scala.collection.JavaConversions._
+import org.locationtech.jts.{geom => jts}
 
 package object vector extends SeqMethods
     with reproject.Implicits

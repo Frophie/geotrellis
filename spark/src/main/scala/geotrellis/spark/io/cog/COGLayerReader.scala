@@ -24,12 +24,13 @@ import geotrellis.raster.io.geotiff.reader.TiffTagsReader
 import geotrellis.spark._
 import geotrellis.spark.io._
 import geotrellis.spark.io.index.{Index, KeyIndex, IndexRanges, MergeQueue}
-import geotrellis.spark.tiling.LayoutDefinition
 import geotrellis.util._
 import geotrellis.spark.util.KryoWrapper
+
 import org.apache.spark.rdd._
 import spray.json._
 import org.apache.spark.SparkContext
+
 import java.net.URI
 import java.util.ServiceLoader
 
@@ -428,8 +429,9 @@ object COGLayerReader {
     * Find instances of [[COGLayerReaderProvider]] through Java SPI.
     */
   def apply(attributeStore: AttributeStore, layerReaderUri: URI)(implicit sc: SparkContext): COGLayerReader[LayerId] = {
-    import scala.collection.JavaConversions._
-    ServiceLoader.load(classOf[COGLayerReaderProvider]).iterator()
+    import scala.collection.JavaConverters._
+    ServiceLoader.load(classOf[COGLayerReaderProvider])
+      .iterator().asScala
       .find(_.canProcess(layerReaderUri))
       .getOrElse(throw new RuntimeException(s"Unable to find LayerReaderProvider for $layerReaderUri"))
       .layerReader(layerReaderUri, attributeStore, sc)

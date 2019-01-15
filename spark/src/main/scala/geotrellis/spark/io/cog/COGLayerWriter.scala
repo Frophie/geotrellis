@@ -27,8 +27,8 @@ import geotrellis.raster.io.geotiff.compression.{Compression, NoCompression}
 import geotrellis.spark._
 import geotrellis.spark.io.{AttributeNotFoundError, AttributeStore, LayerNotFoundError, LayerOutOfKeyBoundsError, Writer}
 import geotrellis.spark.io.index._
-import geotrellis.util.LazyLogging
 
+import com.typesafe.scalalogging.LazyLogging
 import org.apache.spark.rdd.RDD
 import spray.json._
 
@@ -231,8 +231,9 @@ object COGLayerWriter {
    * Find instances of [[COGLayerWriterProvider]] through Java SPI.
    */
   def apply(attributeStore: AttributeStore, layerWriterUri: URI): COGLayerWriter = {
-    import scala.collection.JavaConversions._
-    ServiceLoader.load(classOf[COGLayerWriterProvider]).iterator()
+    import scala.collection.JavaConverters._
+    ServiceLoader.load(classOf[COGLayerWriterProvider])
+      .iterator().asScala
       .find(_.canProcess(layerWriterUri))
       .getOrElse(throw new RuntimeException(s"Unable to find a COGLayerWriterProvider for $layerWriterUri"))
       .layerWriter(layerWriterUri, attributeStore)

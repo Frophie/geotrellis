@@ -18,15 +18,15 @@ package geotrellis.spark.rasterize
 
 import org.scalatest._
 import geotrellis.raster._
-import geotrellis.raster.rasterize._
+import geotrellis.raster.rasterize.Rasterizer
+import geotrellis.layer._
 import geotrellis.spark._
 import geotrellis.spark.tiling._
 import geotrellis.spark.testkit._
 import geotrellis.spark.testkit.TestEnvironment
 import geotrellis.raster.rasterize.Rasterizer.Options
 import geotrellis.vector._
-import geotrellis.vector.io._
-import geotrellis.vector.io.wkt._
+import geotrellis.vector.io.wkt.WKT
 import geotrellis.vector.io.json._
 
 import java.nio.file.Files;
@@ -43,10 +43,10 @@ class RasterizeRDDSpec extends FunSpec with Matchers
 
   val septaRailLines = {
     val s = readFile("vector/data/septaRail.geojson")
-    s.parseGeoJson[JsonFeatureCollection].getAllLines
+    s.parseGeoJson[JsonFeatureCollection].getAllLineStrings
   }
 
-  val septaExtent = septaRailLines.map(_.envelope).reduce(_ combine _)
+  val septaExtent = septaRailLines.map(_.extent).reduce(_ combine _)
 
   it("rasterize lines"){
     val linesRdd = sc.parallelize(septaRailLines, 10)
@@ -67,7 +67,7 @@ class RasterizeRDDSpec extends FunSpec with Matchers
         val sk = SpatialKey(tileCol, tileRow)
         val keyExtent = ld.mapTransform(sk)
         sk -> Rasterizer.rasterizeWithValue(
-          MultiLine(septaRailLines),
+          MultiLineString(septaRailLines),
           RasterExtent(keyExtent, 256, 256),
           1)
       }
@@ -81,7 +81,7 @@ class RasterizeRDDSpec extends FunSpec with Matchers
     val huc10 = WKT.read(wkt).asInstanceOf[MultiPolygon]
 
     val layout = TileLayout(3,3,256,256)
-    val ld = LayoutDefinition(huc10.envelope, layout)
+    val ld = LayoutDefinition(huc10.extent, layout)
 
     val polyRdd = sc.parallelize(huc10.polygons)
     val rasterizedRdd = polyRdd.rasterize(1, IntConstantNoDataCellType, ld)

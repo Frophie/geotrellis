@@ -19,11 +19,11 @@ package geotrellis.spark.regrid
 import geotrellis.proj4._
 import geotrellis.raster._
 import geotrellis.raster.testkit._
+import geotrellis.layer._
 import geotrellis.spark._
 import geotrellis.spark.testkit._
 import geotrellis.spark.tiling._
 import geotrellis.vector._
-
 import org.scalatest._
 
 class RegridSpec extends FunSpec with TestEnvironment with RasterMatchers {
@@ -38,7 +38,7 @@ class RegridSpec extends FunSpec with TestEnvironment with RasterMatchers {
       }
     val rdd = sc.parallelize(tiles)
     val ex = Extent(0,0,12.8,9.6)
-    val ld = LayoutDefinition(GridExtent(ex, 0.1, 0.1), 32, 32)
+    val ld = LayoutDefinition(GridExtent[Long](ex, CellSize(0.1, 0.1)), 32, 32)
     val md = TileLayerMetadata[SpatialKey](IntConstantNoDataCellType,
                                            ld,
                                            ex,
@@ -57,7 +57,7 @@ class RegridSpec extends FunSpec with TestEnvironment with RasterMatchers {
       }
     val rdd = sc.parallelize(tiles)
     val ex = Extent(0,0,12.8,9.6)
-    val ld = LayoutDefinition(GridExtent(ex, 0.1, 0.1), 32, 32)
+    val ld = LayoutDefinition(GridExtent[Long](ex, CellSize(0.1, 0.1)), 32, 32)
     val md = TileLayerMetadata[SpaceTimeKey](IntConstantNoDataCellType,
                                              ld,
                                              ex,
@@ -78,21 +78,21 @@ class RegridSpec extends FunSpec with TestEnvironment with RasterMatchers {
     it("should allow joining into larger tiles") {
       val newLayer = simpleLayer.regrid(64)
 
-      assert(newLayer.stitch.dimensions == (128, 128))
+      assert(newLayer.stitch.dimensions == Dimensions(128, 128))
       assertEqual(simpleLayer.stitch.tile, newLayer.stitch.tile.crop(0,0,127,95))
     }
 
     it("should allow breaking into non-square tiles") {
       val newLayer = simpleLayer.regrid(50, 25)
 
-      assert(newLayer.stitch.dimensions == (150, 100))
+      assert(newLayer.stitch.dimensions == Dimensions(150, 100))
       assertEqual(simpleLayer.stitch.tile, newLayer.stitch.tile.crop(0,0,127,95))
     }
 
     it("should work for spatiotemporal data") {
       val newLayer = temporalLayer.regrid(50, 25)
 
-      assert(newLayer.toSpatial(0L).stitch.dimensions == (150, 100))
+      assert(newLayer.toSpatial(0L).stitch.dimensions == Dimensions(150, 100))
       assertEqual(temporalLayer.toSpatial(0L).stitch.tile, newLayer.toSpatial(0L).stitch.tile.crop(0,0,127,95))
     }
   }

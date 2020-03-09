@@ -17,7 +17,7 @@
 package geotrellis.raster.hydrology
 
 import geotrellis.raster._
-import geotrellis.raster.mapalgebra.focal._
+import geotrellis.raster.mapalgebra.focal.{CursorCalculation, DoubleArrayTileResult, IntArrayTileResult, Cursor}
 
 case class FillOptions(threshold: Double)
 object FillOptions {
@@ -34,16 +34,16 @@ object FillOptions {
   *        the threshold appropriately.
   */
 object Fill {
-  def apply(r: Tile, n: Neighborhood, bounds: Option[GridBounds], threshold: Double, target: TargetCell = TargetCell.All): Tile = {
+  def apply(r: Tile, n: Neighborhood, bounds: Option[GridBounds[Int]], threshold: Double, target: TargetCell = TargetCell.All): Tile = {
     if (r.cellType.isFloatingPoint) {
-      new CursorFillCalcDouble(r, Square(1), bounds, threshold, target)
+      new CursorFillCalcDouble(r, Neighborhoods.Square(1), bounds, threshold, target)
     } else {
-      new CursorFillCalc(r, Square(1), bounds, threshold.toInt, target)
+      new CursorFillCalc(r, Neighborhoods.Square(1), bounds, threshold.toInt, target)
     }
   }.execute()
 }
 
-class CursorFillCalcDouble(r: Tile, n: Neighborhood, bounds: Option[GridBounds], threshold: Double, target: TargetCell) 
+class CursorFillCalcDouble(r: Tile, n: Neighborhood, bounds: Option[GridBounds[Int]], threshold: Double, target: TargetCell)
   extends CursorCalculation[Tile](r, n, bounds, target)
   with DoubleArrayTileResult
 {
@@ -70,7 +70,7 @@ class CursorFillCalcDouble(r: Tile, n: Neighborhood, bounds: Option[GridBounds],
 }
 
 
-class CursorFillCalc(r: Tile, n: Neighborhood, bounds: Option[GridBounds], threshold: Int, target: TargetCell)
+class CursorFillCalc(r: Tile, n: Neighborhood, bounds: Option[GridBounds[Int]], threshold: Int, target: TargetCell)
   extends CursorCalculation[Tile](r, n, bounds, target)
   with IntArrayTileResult
 {

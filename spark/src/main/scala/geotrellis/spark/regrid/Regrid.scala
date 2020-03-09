@@ -17,13 +17,12 @@
 package geotrellis.spark.regrid
 
 import org.apache.spark.rdd.RDD
-
 import geotrellis.raster._
 import geotrellis.raster.crop._
 import geotrellis.raster.prototype._
 import geotrellis.raster.stitch._
+import geotrellis.layer._
 import geotrellis.spark._
-import geotrellis.spark.tiling._
 import geotrellis.util._
 import geotrellis.vector._
 
@@ -37,15 +36,15 @@ object Regrid {
 
     // let the interval be start to end, inclusive
     def intersect(that: Interval[N]) = {
-        Interval(if (ord.compare(this.start, that.start) > 0) this.start else that.start, 
+        Interval(if (ord.compare(this.start, that.start) > 0) this.start else that.start,
                  if (ord.compare(this.end, that.end) < 0) this.end else that.end)
     }
   }
 
   def apply[
     K: SpatialComponent: ClassTag,
-    V <: CellGrid: ClassTag: Stitcher: (? => CropMethods[V]),
-    M: Component[?, LayoutDefinition]: Component[?, Bounds[K]]
+    V: ClassTag: Stitcher: (* => CropMethods[V]),
+    M: Component[*, LayoutDefinition]: Component[*, Bounds[K]]
   ](layer: RDD[(K, V)] with Metadata[M], tileCols: Int, tileRows: Int): RDD[(K, V)] with Metadata[M] = {
     val md = layer.metadata
     val ld = md.getComponent[LayoutDefinition]
@@ -120,10 +119,10 @@ object Regrid {
 
               val xSpan: Interval[Long] = oldXrange intersect newXrange
               val ySpan: Interval[Long] = oldYrange intersect newYrange
-              newKey -> 
-                (oldTile.crop((xSpan.start - oldXstart).toInt, 
-                              (ySpan.start - oldYstart).toInt, 
-                              (xSpan.end - oldXstart).toInt, 
+              newKey ->
+                (oldTile.crop((xSpan.start - oldXstart).toInt,
+                              (ySpan.start - oldYstart).toInt,
+                              (xSpan.end - oldXstart).toInt,
                               (ySpan.end - oldYstart).toInt),
                  ((xSpan.start - newXrange.start).toInt, (ySpan.start - newYrange.start).toInt)
                 )
@@ -138,8 +137,8 @@ object Regrid {
 
   def apply[
     K: SpatialComponent: ClassTag,
-    V <: CellGrid: ClassTag: Stitcher: (? => CropMethods[V]),
-    M: Component[?, LayoutDefinition]: Component[?, Bounds[K]]
+    V: ClassTag: Stitcher: (* => CropMethods[V]),
+    M: Component[*, LayoutDefinition]: Component[*, Bounds[K]]
   ](layer: RDD[(K, V)] with Metadata[M], tileSize: Int): RDD[(K, V)] with Metadata[M] = apply(layer, tileSize, tileSize)
 
 }

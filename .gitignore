@@ -11,6 +11,7 @@ project/plugins/target
 project/target
 target
 .ensime
+.metals/
 \#*#
 *~
 .#*
@@ -27,6 +28,7 @@ _SUCCESS
 .settings
 .history
 .idea
+*.bloop
 .DS_Store
 *.iml
 *.swp
@@ -50,3 +52,6 @@ site/
 derby.log
 metastore_db/
 *.log
+
+spark/src/test/resources/vlm/*catalog*
+

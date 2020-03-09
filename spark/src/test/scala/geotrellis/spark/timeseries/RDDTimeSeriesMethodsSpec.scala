@@ -18,13 +18,11 @@ package geotrellis.spark.costdistance
 
 import geotrellis.proj4.LatLng
 import geotrellis.raster._
+import geotrellis.layer._
 import geotrellis.spark._
 import geotrellis.spark.testkit.TestEnvironment
-import geotrellis.spark.tiling.LayoutDefinition
 import geotrellis.vector._
-
 import org.apache.spark.rdd.RDD
-
 import org.scalatest._
 
 
@@ -38,7 +36,7 @@ class RDDTimeSeriesMethodsSpec extends FunSpec
     val tile3 = IntConstantNoDataArrayTile(Array.fill[Int](25)(3), 5, 5)
     val tile4 = IntConstantNoDataArrayTile(Array.fill[Int](25)(4), 5, 5)
     val extent = Extent(0, 0, 10, 5)
-    val gridExtent = GridExtent(extent, 1, 1) // 10×5 pixels
+    val gridExtent = GridExtent[Long](extent, CellSize(1, 1)) // 10×5 pixels
     val layoutDefinition = LayoutDefinition(gridExtent, 10, 5)
     val bounds = Bounds(SpaceTimeKey(0, 0, 0), SpaceTimeKey(1, 0, 1))
     val tileLayerMetadata = TileLayerMetadata(

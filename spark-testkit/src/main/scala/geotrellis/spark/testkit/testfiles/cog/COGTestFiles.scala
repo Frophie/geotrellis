@@ -19,18 +19,17 @@ package geotrellis.spark.testkit.testfiles.cog
 import geotrellis.proj4._
 import geotrellis.raster._
 import geotrellis.raster.resample.NearestNeighbor
+import geotrellis.layer._
 import geotrellis.spark._
 import geotrellis.spark.reproject._
-import geotrellis.spark.io._
-import geotrellis.spark.io.hadoop._
+import geotrellis.spark.store._
+import geotrellis.spark.store.hadoop._
 import geotrellis.spark.testkit.TestEnvironment
 import geotrellis.spark.testkit.testfiles._
 import geotrellis.spark.tiling._
-
 import jp.ne.opt.chronoscala.Imports._
 import org.apache.spark.SparkContext
 import org.apache.hadoop.fs.Path
-
 import java.time.{ZoneOffset, ZonedDateTime}
 
 trait COGTestFiles { self: TestEnvironment =>
@@ -131,7 +130,7 @@ object COGTestFiles {
       TileLayerMetadata(cellType, LayoutDefinition(crs.worldExtent, tileLayout), extent, crs, keyBounds)
     }
 
-    val gridBounds = md.gridBounds
+    val gridBounds = md.tileBounds
     val tileLayout = md.tileLayout
 
     val spatialTestFile = layerName match {
@@ -175,7 +174,7 @@ object COGTestFiles {
       TileLayerMetadata(cellType, LayoutDefinition(crs.worldExtent, tileLayout), extent, crs, keyBounds)
     }
 
-    val gridBounds = md.gridBounds
+    val gridBounds = md.tileBounds
     val tileLayout = md.tileLayout
 
     val spaceTimeTestTiles = layerName match {

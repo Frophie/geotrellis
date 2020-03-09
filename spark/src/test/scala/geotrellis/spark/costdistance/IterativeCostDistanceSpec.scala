@@ -16,13 +16,13 @@
 
 package geotrellis.spark.costdistance
 
+import geotrellis.layer.TileLayerMetadata
 import geotrellis.proj4.LatLng
 import geotrellis.raster._
+import geotrellis.layer._
 import geotrellis.spark._
 import geotrellis.spark.testkit.TestEnvironment
-import geotrellis.spark.tiling.LayoutDefinition
 import geotrellis.vector._
-
 import org.scalatest._
 
 
@@ -34,7 +34,7 @@ class IterativeCostDistanceSpec extends FunSpec
     val tile = IntArrayTile(Array.fill[Int](25)(1), 5, 5)
     val skey = SpatialKey(0, 0)
     val extent = Extent(0, 0, 5, 5)
-    val gridExtent = GridExtent(extent, 1, 1) // 5×5 pixels
+    val gridExtent = GridExtent[Long](extent, CellSize(1, 1)) // 5×5 pixels
     val layoutDefinition = LayoutDefinition(gridExtent, 5)
     val bounds = Bounds(skey, skey)
     val tileLayerMetadata = TileLayerMetadata(IntCellType, layoutDefinition, extent, LatLng, bounds)
@@ -45,7 +45,7 @@ class IterativeCostDistanceSpec extends FunSpec
   val rdd2 = {
     val tile = IntArrayTile(Array.fill[Int](25)(1), 5, 5)
     val extent = Extent(0, 0, 10, 5)
-    val gridExtent = GridExtent(extent, 1, 1) // 10×5 pixels
+    val gridExtent = GridExtent[Long](extent, CellSize(1, 1)) // 10×5 pixels
     val layoutDefinition = LayoutDefinition(gridExtent, 10, 5)
     val bounds = Bounds(SpatialKey(0,0), SpatialKey(1,0))
     val tileLayerMetadata = TileLayerMetadata(IntCellType, layoutDefinition, extent, LatLng, bounds)
@@ -56,7 +56,7 @@ class IterativeCostDistanceSpec extends FunSpec
   val rdd3 = {
     val tile = IntArrayTile(Array.fill[Int](25)(1), 5, 5)
     val extent = Extent(0, 0, 5, 10)
-    val gridExtent = GridExtent(extent, 1, 1) // 5×10 pixels
+    val gridExtent = GridExtent[Long](extent, CellSize(1, 1)) // 5×10 pixels
     val layoutDefinition = LayoutDefinition(gridExtent, 5, 10)
     val bounds = Bounds(SpatialKey(0,0), SpatialKey(0,1))
     val tileLayerMetadata = TileLayerMetadata(IntCellType, layoutDefinition, extent, LatLng, bounds)
@@ -104,7 +104,7 @@ class IterativeCostDistanceSpec extends FunSpec
       val resolution = IterativeCostDistance.computeResolution(rdd3)
       val hops = (up.getDouble(2,3) - down.getDouble(2,3)) / resolution
 
-      hops should be (5.0)
+      hops should be (5.0 +- 1e-10)
     }
 
     it("Should propogate down") {
@@ -114,7 +114,7 @@ class IterativeCostDistanceSpec extends FunSpec
       val resolution = IterativeCostDistance.computeResolution(rdd3)
       val hops = (up.getDouble(2,1) - down.getDouble(2,1)) / resolution
 
-      hops should be (5.0)
+      hops should be (5.0 +- 1e-10)
     }
 
   }

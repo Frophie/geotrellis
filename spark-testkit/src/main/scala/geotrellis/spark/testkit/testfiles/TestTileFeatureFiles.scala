@@ -18,13 +18,12 @@ package geotrellis.spark.testkit.testfiles
 
 import geotrellis.proj4._
 import geotrellis.raster._
+import geotrellis.layer._
 import geotrellis.spark._
 import geotrellis.spark.tiling._
 import geotrellis.spark.testkit._
-
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
-
 import jp.ne.opt.chronoscala.Imports._
 import java.time.{ZoneOffset, ZonedDateTime}
 
@@ -44,7 +43,7 @@ object TestTileFeatureFiles {
       TileLayerMetadata(cellType, LayoutDefinition(crs.worldExtent, tileLayout), extent, crs, keyBounds)
     }
 
-    val gridBounds = md.gridBounds
+    val gridBounds = md.tileBounds
     val tileLayout = md.tileLayout
 
     val spatialTestFile = layerName match {
@@ -88,7 +87,7 @@ object TestTileFeatureFiles {
       TileLayerMetadata(cellType, LayoutDefinition(crs.worldExtent, tileLayout), extent, crs, keyBounds)
     }
 
-    val gridBounds = md.gridBounds
+    val gridBounds = md.tileBounds
     val tileLayout = md.tileLayout
 
     val spaceTimeTestTiles = layerName match {

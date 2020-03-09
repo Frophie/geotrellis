@@ -17,7 +17,7 @@
 package geotrellis.raster.mapalgebra.focal.hillshade
 
 import geotrellis.raster._
-import geotrellis.raster.mapalgebra.focal._
+import geotrellis.raster.mapalgebra.focal.ShortArrayTileResult
 import geotrellis.raster.mapalgebra.focal.Angles._
 
 import scala.math._
@@ -39,7 +39,7 @@ import scala.math._
  * @see [[http://goo.gl/DtVDQ Esri Desktop's description of Hillshade.]]
  */
 object Hillshade {
-  def apply(tile: Tile, n: Neighborhood, bounds: Option[GridBounds], cs: CellSize, az: Double, al: Double, z: Double, target: TargetCell = TargetCell.All): Tile = {
+  def apply(tile: Tile, n: Neighborhood, bounds: Option[GridBounds[Int]], cs: CellSize, az: Double, al: Double, z: Double, target: TargetCell = TargetCell.All): Tile = {
     new SurfacePointCalculation[Tile](tile, n, bounds, cs, target) with
       ShortArrayTileResult
     {
@@ -53,9 +53,8 @@ object Hillshade {
       val sinAz = sin(azimuth)
 
       def setValue(x: Int, y: Int, s: SurfacePoint) {
-        val slope = s.slope(zFactor)
-        val aspect = s.aspect
-
+        s.`dz/dx` = s.`dz/dx` * zFactor
+        s.`dz/dy` = s.`dz/dy` * zFactor
         val c = cosAz * s.cosAspect + sinAz * s.sinAspect // cos(azimuth - aspect)
         val v = (cosZ * s.cosSlope) + (sinZ * s.sinSlope * c)
         resultTile.set(x, y, round(127.0 * max(0.0, v)).toInt)

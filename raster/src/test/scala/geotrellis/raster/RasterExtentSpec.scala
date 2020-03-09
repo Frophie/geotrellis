@@ -216,7 +216,7 @@ class RasterExtentSpec extends FunSpec with Matchers
 
     // Exploring a little more...
     it("reproduce bad grid bounds - another case") {
-      val re = RasterExtent(Extent(10.0, 30.0, 20.0, 40.0), 1.0, 1.0, 240, 240)
+      val re = RasterExtent(Extent(10.0, 30.0, 20.0, 40.0), 240, 240)
       val subExtent = Extent(11.0, 39.9999999999, 100.0, 60.0)
 
       val gb = re.gridBoundsFor(subExtent)
@@ -225,7 +225,7 @@ class RasterExtentSpec extends FunSpec with Matchers
 
     // Try negative side just for kicks
     it("reproduce bad grid bounds - third case") {
-      val re = RasterExtent(Extent(10.0, -40.0, 20.0, -30.0), 1.0, 1.0, 240, 240)
+      val re = RasterExtent(Extent(10.0, -40.0, 20.0, -30.0), 240, 240)
       val subExtent = Extent(11.0, -30.00000000001, 100.0, 60.0)
 
       val gb = re.gridBoundsFor(subExtent)
@@ -234,7 +234,7 @@ class RasterExtentSpec extends FunSpec with Matchers
 
     // Doesn't break with rowMin...
     it("reproduce bad grid bounds - rowMin") {
-      val re = RasterExtent(Extent(10.0, 30.0, 20.0, 40.0), 1.0, 1.0, 240, 240)
+      val re = RasterExtent(Extent(10.0, 30.0, 20.0, 40.0), 240, 240)
       val subExtent = Extent(9.9999999999, 40.0, 100.0, 60.0)
 
       val gb = re.gridBoundsFor(subExtent)
@@ -243,7 +243,7 @@ class RasterExtentSpec extends FunSpec with Matchers
 
     // Probably happens with colMax as well...
     it("reproduce bad grid bounds - colMax") {
-      val re = RasterExtent(Extent(10.0, 30.0, 20.0, 40.0), 1.0, 1.0, 240, 240)
+      val re = RasterExtent(Extent(10.0, 30.0, 20.0, 40.0), 240, 240)
       val subExtent = Extent(0.0, 30.0, 10.0000000001, 60.0)
 
       val gb = re.gridBoundsFor(subExtent)
@@ -484,5 +484,22 @@ class RasterExtentSpec extends FunSpec with Matchers
       }
     }
 
+    it("should handle a negative extent with north and west round func instead of floor applied") {
+      val extent = Extent(-60, -30, -50, -20)
+      val rasterExtent = RasterExtent(extent, 0.00025, 0.00025, 40000, 40000)
+
+      val internalExtent = Extent(-51.6, -26.5, -51.5, -26.4)
+      val internalExtent2 = Extent(-51.4, -26.3, -51.3, -26.2)
+      val bounds = rasterExtent.gridBoundsFor(internalExtent)
+
+      val height = (bounds.rowMin to bounds.rowMax).length
+      val width = (bounds.colMin to bounds.colMax).length
+
+      height shouldBe 400
+      width shouldBe 400
+
+      rasterExtent.mapXToGrid(internalExtent2.xmin) shouldBe 34400
+      rasterExtent.mapYToGrid(internalExtent2.ymax) shouldBe 24800
+    }
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Azavea
+ * Copyright 2019 Azavea
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 package geotrellis.vectortile.internal
 
-import geotrellis.vector.{ Geometry, MultiGeometry, Point }
+import geotrellis.vector.{ Geometry, Point }
 
 // --- //
 
@@ -40,7 +40,7 @@ import geotrellis.vector.{ Geometry, MultiGeometry, Point }
   * implicitly[ProtobufGeom[Point, MultiPoint]].fromCommands(Command.commands(Seq(9,2,2)), topLeft, resolution)
   * }}}
   */
-private[vectortile] trait ProtobufGeom[G1 <: Geometry, G2 <: MultiGeometry] extends Serializable {
+private[vectortile] trait ProtobufGeom[G1 <: Geometry, G2 <: Geometry] extends Serializable {
   /**
     * Decode a sequence of VectorTile [[Command]]s into a GeoTrellis
     * Geometry. Due to the reasons stated above, this may be either

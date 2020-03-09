@@ -18,15 +18,17 @@ package geotrellis.raster.split
 
 import geotrellis.raster._
 
-class TileFeatureSplitMethods[
-  T <: CellGrid : (? => SplitMethods[T]), 
+abstract class TileFeatureSplitMethods[
+  T <: CellGrid[Int]: (* => SplitMethods[T]),
   D
-](val self: TileFeature[T, D]) extends SplitMethods[TileFeature[T, D]] {
+] extends SplitMethods[TileFeature[T, D]] {
   import Split.Options
 
-  def split(tileLayout: TileLayout, options: Options): Array[TileFeature[T, D]] = {
+  def split(tileLayout: TileLayout, options: Options): Seq[TileFeature[T, D]] = {
     val results = self.tile.split(tileLayout, options)
     results.map(t ⇒ TileFeature(t, self.data))
   }
 }
 
+trait SinglebandTileFeatureSplitMethods[D] extends TileFeatureSplitMethods[Tile, D]
+trait MultibandTileFeatureSplitMethods[D] extends TileFeatureSplitMethods[MultibandTile, D]

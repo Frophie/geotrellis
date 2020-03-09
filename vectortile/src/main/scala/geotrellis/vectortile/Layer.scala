@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Azavea
+ * Copyright 2019 Azavea
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +16,15 @@
 
 package geotrellis.vectortile
 
-import scala.collection.mutable.ListBuffer
+import geotrellis.vectortile.internal._
+import geotrellis.vectortile.internal.PBTile._
+import geotrellis.vectortile.internal.PBTile.PBGeomType.{LINESTRING, POINT, POLYGON}
 
+import geotrellis.util.annotations.experimental
 import geotrellis.proj4.{LatLng, WebMercator}
 import geotrellis.vector._
-import geotrellis.vector.io._
-import geotrellis.vectortile.internal.{vector_tile => vt, _}
-import geotrellis.vectortile.internal.vector_tile.Tile.GeomType.{LINESTRING, POINT, POLYGON}
-import geotrellis.util.annotations.experimental
+
+import scala.collection.mutable.ListBuffer
 
 // --- //
 
@@ -53,20 +54,20 @@ import geotrellis.util.annotations.experimental
   def resolution: Double = tileExtent.height / tileWidth
 
   /** Every Point Feature in this Layer. */
-  def points: Seq[Feature[Point, Map[String, Value]]]
+  def points: Seq[MVTFeature[Point]]
   /** Every MultiPoint Feature in this Layer. */
-  def multiPoints: Seq[Feature[MultiPoint, Map[String, Value]]]
+  def multiPoints: Seq[MVTFeature[MultiPoint]]
   /** Every Line Feature in this Layer. */
-  def lines: Seq[Feature[Line, Map[String, Value]]]
+  def lines: Seq[MVTFeature[LineString]]
   /** Every MultiLine Feature in this Layer. */
-  def multiLines: Seq[Feature[MultiLine, Map[String, Value]]]
+  def multiLines: Seq[MVTFeature[MultiLineString]]
   /** Every Polygon Feature in this Layer. */
-  def polygons: Seq[Feature[Polygon, Map[String, Value]]]
+  def polygons: Seq[MVTFeature[Polygon]]
   /** Every MultiPolygon Feature in this Layer. */
-  def multiPolygons: Seq[Feature[MultiPolygon, Map[String, Value]]]
+  def multiPolygons: Seq[MVTFeature[MultiPolygon]]
 
   /** All Features of Single and Multi Geometries. */
-  def features: Seq[Feature[Geometry, Map[String, Value]]] = {
+  def features: Seq[MVTFeature[Geometry]] = {
     Seq(
       points,
       multiPoints,
@@ -77,10 +78,18 @@ import geotrellis.util.annotations.experimental
     ).flatten
   }
 
-  /** Encode this ProtobufLayer a mid-level Layer ready to be encoded as protobuf bytes. */
-  private[vectortile] def toProtobuf: vt.Tile.Layer = {
+  /**
+    * Encode this ProtobufLayer a mid-level Layer ready to be encoded as protobuf bytes.
+    * @param forcePolygonWinding is a parameter to force orient all Polygons and MultiPolygons
+    *                           clockwise, since it's a MapBox spec requirement:
+    *                           Any polygon interior ring must be oriented with the winding order opposite that of their
+    *                           parent exterior ring and all interior rings must directly follow the exterior ring to which they belong.
+    *                           Exterior rings must be oriented clockwise and interior rings must be oriented counter-clockwise (when viewed in screen coordinates).
+    *                           See https://docs.mapbox.com/vector-tiles/specification/#winding-order for mor details.
+    **/
+  private[vectortile] def toProtobuf(forcePolygonWinding: Boolean = true): PBLayer = {
     val pgp = implicitly[ProtobufGeom[Point, MultiPoint]]
-    val pgl = implicitly[ProtobufGeom[Line, MultiLine]]
+    val pgl = implicitly[ProtobufGeom[LineString, MultiLineString]]
     val pgy = implicitly[ProtobufGeom[Polygon, MultiPolygon]]
 
     val (keys, values) = totalMeta
@@ -101,42 +110,51 @@ import geotrellis.util.annotations.experimental
      *   points.map(f => unfeature(keys, values, f))
      */
     val features = Seq(
-      points.map(f => unfeature(keyMap, valMap, POINT, pgp.toCommands(Left(f.geom), tileExtent.northWest, resolution), f.data)),
-      multiPoints.map(f => unfeature(keyMap, valMap, POINT, pgp.toCommands(Right(f.geom), tileExtent.northWest, resolution), f.data)),
-      lines.map(f => unfeature(keyMap, valMap, LINESTRING, pgl.toCommands(Left(f.geom), tileExtent.northWest, resolution), f.data)),
-      multiLines.map(f => unfeature(keyMap, valMap, LINESTRING, pgl.toCommands(Right(f.geom), tileExtent.northWest, resolution), f.data)),
-      polygons.map(f => unfeature(keyMap, valMap, POLYGON, pgy.toCommands(Left(f.geom), tileExtent.northWest, resolution), f.data)),
-      multiPolygons.map(f => unfeature(keyMap, valMap, POLYGON, pgy.toCommands(Right(f.geom), tileExtent.northWest, resolution), f.data))
+      points.map(f => unfeature(f.id, keyMap, valMap, POINT, pgp.toCommands(Left(f.geom), tileExtent.northWest, resolution), f.data)),
+      multiPoints.map(f => unfeature(f.id, keyMap, valMap, POINT, pgp.toCommands(Right(f.geom), tileExtent.northWest, resolution), f.data)),
+      lines.map(f => unfeature(f.id, keyMap, valMap, LINESTRING, pgl.toCommands(Left(f.geom), tileExtent.northWest, resolution), f.data)),
+      multiLines.map(f => unfeature(f.id, keyMap, valMap, LINESTRING, pgl.toCommands(Right(f.geom), tileExtent.northWest, resolution), f.data)),
+      polygons.map { f =>
+        val geom = if(forcePolygonWinding) f.geom.normalized else f.geom
+        unfeature(f.id, keyMap, valMap, POLYGON,
+                  pgy.toCommands(Left(geom), tileExtent.northWest, resolution), f.data)
+      },
+      multiPolygons.map { f =>
+        val geom = if(forcePolygonWinding) f.geom.normalized else f.geom
+        unfeature(f.id, keyMap, valMap, POLYGON,
+                  pgy.toCommands(Right(geom), tileExtent.northWest, resolution), f.data)
+      }
     ).flatten
 
-    vt.Tile.Layer(version, name, features, keys, values.map(_.toProtobuf), Some(tileWidth))
+    PBLayer(version, name, features, keys, values.map(_.toProtobuf), Some(tileWidth))
   }
 
   private def totalMeta: (Seq[String], Seq[Value]) = {
     /* Pull into memory once to avoid GC on the feature list */
-    val fs: Seq[Feature[Geometry, Map[String, Value]]] = features
+    val fs: Seq[MVTFeature[Geometry]] = features
 
     /* Must be unique */
-    val keys: Seq[String] = fs.map(_.data.keys).flatten.distinct
+    val keys: Seq[String] = fs.flatMap(_.data.keys).distinct
 
-    val values: Seq[Value] = fs.map(_.data.values).flatten.distinct
+    val values: Seq[Value] = fs.flatMap(_.data.values).distinct
 
     (keys, values)
   }
 
   private def unfeature(
+    featureId: Option[Long],
     keys: Map[String, Int],
     values: Map[Value, Int],
-    geomType: vt.Tile.GeomType,
+    geomType: PBGeomType,
     cmds: Seq[Command],
     data: Map[String, Value]
-  ): vt.Tile.Feature = {
+  ): PBFeature = {
     val tags = data.toSeq.foldRight(List.empty[Int]) { case (pair, acc) =>
-      /* These `Option.get` _should_ never fail */
-      keys.get(pair._1).get :: values.get(pair._2).get :: acc
+      /* These `Map.apply` _should_ never fail */
+      keys(pair._1) :: values(pair._2) :: acc
     }
 
-    vt.Tile.Feature(None, tags, Some(geomType), Command.uncommands(cmds))
+    PBFeature(featureId, tags, Some(geomType), Command.uncommands(cmds))
   }
 
   /** Pretty-print this `Layer`. */
@@ -164,11 +182,12 @@ import geotrellis.util.annotations.experimental
 """
   }
 
-  private def prettyFeature[G <: Geometry](fs: Seq[Feature[G, Map[String, Value]]]): String = {
+  private def prettyFeature[G <: Geometry](fs: Seq[MVTFeature[G]]): String = {
     if (fs.isEmpty) "}" else {
       fs.map({ f =>
 s"""
         feature {
+          id = ${f.id}
           geometry (WKT) = ${f.geom}
           geometry (LatLng GeoJson) = ${f.geom.reproject(WebMercator, LatLng).toGeoJson}
           ${prettyMeta(f.data)}
@@ -196,12 +215,12 @@ ${sortedMeta.map({ case (k,v) => s"            ${k}: ${v}"}).mkString("\n")}
   tileWidth: Int,
   version: Int,
   tileExtent: Extent,
-  points: Seq[Feature[Point, Map[String, Value]]],
-  multiPoints: Seq[Feature[MultiPoint, Map[String, Value]]],
-  lines: Seq[Feature[Line, Map[String, Value]]],
-  multiLines: Seq[Feature[MultiLine, Map[String, Value]]],
-  polygons: Seq[Feature[Polygon, Map[String, Value]]],
-  multiPolygons: Seq[Feature[MultiPolygon, Map[String, Value]]]
+  points: Seq[MVTFeature[Point]],
+  multiPoints: Seq[MVTFeature[MultiPoint]],
+  lines: Seq[MVTFeature[LineString]],
+  multiLines: Seq[MVTFeature[MultiLineString]],
+  polygons: Seq[MVTFeature[Polygon]],
+  multiPolygons: Seq[MVTFeature[MultiPolygon]]
 ) extends Layer
 
 /**
@@ -210,7 +229,7 @@ ${sortedMeta.map({ case (k,v) => s"            ${k}: ${v}"}).mkString("\n")}
   *
   */
 @experimental case class LazyLayer(
-  private val rawLayer: vt.Tile.Layer,
+  private val rawLayer: PBLayer,
   tileExtent: Extent
 ) extends Layer {
   /* Expected fields */
@@ -227,12 +246,12 @@ ${sortedMeta.map({ case (k,v) => s"            ${k}: ${v}"}).mkString("\n")}
    * Polymorphically generate a [[Stream]] of parsed Geometries and
    * their metadata.
    */
-  private def geomStream[G1 <: Geometry, G2 <: MultiGeometry](
-    feats: ListBuffer[vt.Tile.Feature]
-  )(implicit protobufGeom: ProtobufGeom[G1, G2]): Stream[(Either[G1, G2], Map[String, Value])] = {
-    def loop(fs: ListBuffer[vt.Tile.Feature]): Stream[(Either[G1, G2], Map[String, Value])] = {
+  private def geomStream[G1 <: Geometry, G2 <: Geometry](
+    feats: ListBuffer[PBFeature]
+  )(implicit protobufGeom: ProtobufGeom[G1, G2]): Stream[(Option[Long], Either[G1, G2], Map[String, Value])] = {
+    def loop(fs: ListBuffer[PBFeature]): Stream[(Option[Long], Either[G1, G2], Map[String, Value])] = {
       if (fs.isEmpty) {
-        Stream.empty[(Either[G1, G2], Map[String, Value])]
+        Stream.empty[(Option[Long], Either[G1, G2], Map[String, Value])]
       } else {
         val geoms: Seq[Int] = fs.head.geometry
 
@@ -248,8 +267,7 @@ ${sortedMeta.map({ case (k,v) => s"            ${k}: ${v}"}).mkString("\n")}
           loop(fs.tail)
         } else {
           val g = protobufGeom.fromCommands(Command.commands(geoms), tileExtent.northWest, resolution)
-
-          (g, getMeta(rawLayer.keys, rawLayer.values, fs.head.tags)) #:: loop(fs.tail)
+          (fs.head.id, g, getMeta(rawLayer.keys, rawLayer.values, fs.head.tags)) #:: loop(fs.tail)
         }
       }
     }
@@ -261,7 +279,7 @@ ${sortedMeta.map({ case (k,v) => s"            ${k}: ${v}"}).mkString("\n")}
    * Construct Feature-specific metadata from the key/value lists of
    * the parent layer.
    */
-  private def getMeta(keys: Seq[String], vals: Seq[vt.Tile.Value], tags: Seq[Int]): Map[String, Value] = {
+  private def getMeta(keys: Seq[String], vals: Seq[PBValue], tags: Seq[Int]): Map[String, Value] = {
     /* The Seqs passed in here are backed by [[Vector]] on the Protobuf
      * end of things.
      */
@@ -273,7 +291,7 @@ ${sortedMeta.map({ case (k,v) => s"            ${k}: ${v}"}).mkString("\n")}
 
   /* Geometry Streams */
   private lazy val pointStream = geomStream[Point, MultiPoint](pointFs)
-  private lazy val lineStream = geomStream[Line, MultiLine](lineFs)
+  private lazy val lineStream = geomStream[LineString, MultiLineString](lineFs)
   private lazy val polyStream = geomStream[Polygon, MultiPolygon](polyFs)
 
   /* OPTIMIZATION NOTES
@@ -290,39 +308,39 @@ ${sortedMeta.map({ case (k,v) => s"            ${k}: ${v}"}).mkString("\n")}
    * a legal state for JTS Geoms. These cause problems later when reading/writing
    * VT Features, so we avoid those problems by ignoring any empty Geoms here.
    */
-  lazy val points: Stream[Feature[Point, Map[String, Value]]] = pointStream
+  lazy val points: Stream[MVTFeature[Point]] = pointStream
     .flatMap({
-      case (Left(p), meta) => new ::(Feature(p, meta), Nil)
+      case (id, Left(p), meta) => new ::(MVTFeature(id, p, meta), Nil)
       case _ => Nil
     })
 
-  lazy val multiPoints: Stream[Feature[MultiPoint, Map[String, Value]]] = pointStream
+  lazy val multiPoints: Stream[MVTFeature[MultiPoint]] = pointStream
     .flatMap({
-      case (Right(p), meta) if !p.isEmpty => new ::(Feature(p, meta), Nil)
+      case (id, Right(p), meta) if !p.isEmpty => new ::(MVTFeature(id, p, meta), Nil)
       case _ => Nil
     })
 
-  lazy val lines: Stream[Feature[Line, Map[String, Value]]] = lineStream
+  lazy val lines: Stream[MVTFeature[LineString]] = lineStream
     .flatMap({
-      case (Left(p), meta) if !p.isEmpty => new ::(Feature(p, meta), Nil)
+      case (id, Left(p), meta) if !p.isEmpty => new ::(MVTFeature(id, p, meta), Nil)
       case _ => Nil
     })
 
-  lazy val multiLines: Stream[Feature[MultiLine, Map[String, Value]]] = lineStream
+  lazy val multiLines: Stream[MVTFeature[MultiLineString]] = lineStream
     .flatMap({
-      case (Right(p), meta) if !p.isEmpty => new ::(Feature(p, meta), Nil)
+      case (id, Right(p), meta) if !p.isEmpty => new ::(MVTFeature(id, p, meta), Nil)
       case _ => Nil
     })
 
-  lazy val polygons: Stream[Feature[Polygon, Map[String, Value]]] = polyStream
+  lazy val polygons: Stream[MVTFeature[Polygon]] = polyStream
     .flatMap({
-      case (Left(p), meta) if !p.isEmpty => new ::(Feature(p, meta), Nil)
+      case (id, Left(p), meta) if !p.isEmpty => new ::(MVTFeature(id, p, meta), Nil)
       case _ => Nil
     })
 
-  lazy val multiPolygons: Stream[Feature[MultiPolygon, Map[String, Value]]] = polyStream
+  lazy val multiPolygons: Stream[MVTFeature[MultiPolygon]] = polyStream
     .flatMap({
-      case (Right(p), meta) if !p.isEmpty => new ::(Feature(p, meta), Nil)
+      case (id, Right(p), meta) if !p.isEmpty => new ::(MVTFeature(id, p, meta), Nil)
       case _ => Nil
     })
 
@@ -331,11 +349,11 @@ ${sortedMeta.map({ case (k,v) => s"            ${k}: ${v}"}).mkString("\n")}
    * `UNKNOWN` geometry types are ignored.
    */
   private def segregate(
-    features: Seq[vt.Tile.Feature]
-  ): (ListBuffer[vt.Tile.Feature], ListBuffer[vt.Tile.Feature], ListBuffer[vt.Tile.Feature]) = {
-    val points = new ListBuffer[vt.Tile.Feature]
-    val lines = new ListBuffer[vt.Tile.Feature]
-    val polys = new ListBuffer[vt.Tile.Feature]
+    features: Seq[PBFeature]
+  ): (ListBuffer[PBFeature], ListBuffer[PBFeature], ListBuffer[PBFeature]) = {
+    val points = new ListBuffer[PBFeature]
+    val lines = new ListBuffer[PBFeature]
+    val polys = new ListBuffer[PBFeature]
 
     features.foreach { f =>
       f.getType match {

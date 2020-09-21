@@ -24,15 +24,14 @@ import geotrellis.raster.io.geotiff.tags.codes.ColorSpace
 import geotrellis.raster.render.{ColorRamps, IndexedColorMap}
 import geotrellis.raster.testkit._
 import geotrellis.vector.Extent
-import org.scalatest._
+
 import java.io._
 
-class GeoTiffWriterSpec extends FunSpec
-    with Matchers
-    with BeforeAndAfterAll
-    with RasterMatchers
-    with TileBuilders
-    with GeoTiffTestUtils {
+import org.scalatest.{BeforeAndAfterAll, Inspectors}
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.funspec.AnyFunSpec
+
+class GeoTiffWriterSpec extends AnyFunSpec with Matchers with BeforeAndAfterAll with RasterMatchers with TileBuilders with GeoTiffTestUtils {
 
   override def afterAll = purge
 
@@ -143,6 +142,16 @@ class GeoTiffWriterSpec extends FunSpec
 
       addToPurge(path)
       geoTiff.write(path)
+      val actualCRS = SinglebandGeoTiff(path).crs
+
+      actualCRS.toProj4String should be (geoTiff.crs.toProj4String)
+    }
+
+    it ("should write web mercator with no epsg code correctly") {
+      val geoTiff = MultibandGeoTiff(geoTiffPath("ndvi-web-mercator.tif"))
+
+      addToPurge(path)
+      GeoTiff(geoTiff.raster, CRS.fromString(geoTiff.crs.toProj4String)).write(path)
       val actualCRS = SinglebandGeoTiff(path).crs
 
       actualCRS.toProj4String should be (geoTiff.crs.toProj4String)

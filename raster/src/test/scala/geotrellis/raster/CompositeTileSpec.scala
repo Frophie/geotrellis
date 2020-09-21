@@ -16,19 +16,15 @@
 
 package geotrellis.raster
 
-import geotrellis.raster.resample._
 import geotrellis.vector.Extent
 import geotrellis.raster.testkit._
 
-import org.scalatest._
+import org.scalatest.funspec.AnyFunSpec
 
 import spire.syntax.cfor._
 
-class CompositeTileSpec extends FunSpec
-                                with TileBuilders
-                                with RasterMatchers
-                                with TestFiles {
-  describe("wrap") {
+class CompositeTileSpec extends AnyFunSpec with TileBuilders with RasterMatchers with TestFiles {
+  describe("CompositeTileSpec wrap") {
     it("wraps a literal raster") {
       val r =
         createTile(
@@ -53,7 +49,7 @@ class CompositeTileSpec extends FunSpec
         arr.toSet.size should be (1)
         values += arr(0)
       }
-      values.toSeq.sorted.toSeq should be (Seq(1, 2, 3, 4, 5, 6))
+      values.toSeq.sorted should be (Seq(1, 2, 3, 4, 5, 6))
 
       assertEqual(r, tiled)
     }
@@ -154,6 +150,27 @@ class CompositeTileSpec extends FunSpec
       actualExtent should be (extent)
       assertEqual(actualTile, tile)
 
+    }
+  }
+
+  describe("CompositeTile cellType combine") {
+    it("should union cellTypes") {
+      val int = {
+        val r =
+          createTile(
+            Array(1, 1, 1, 2, 2, 2, 3, 3, 3,
+              1, 1, 1, 2, 2, 2, 3, 3, 3,
+
+              4, 4, 4, 5, 5, 5, 6, 6, 6,
+              4, 4, 4, 5, 5, 5, 6, 6, 6),
+            9, 4)
+
+        val tl = TileLayout(3, 2, 3, 2)
+        CompositeTile.wrap(r, tl)
+      }
+      val dt = int.convert(DoubleCellType)
+
+      int.combine(dt)(_ + _).cellType shouldBe int.cellType.union(dt.cellType)
     }
   }
 }

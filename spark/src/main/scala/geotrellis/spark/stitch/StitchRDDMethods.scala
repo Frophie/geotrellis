@@ -17,7 +17,6 @@
 package geotrellis.spark.stitch
 
 import geotrellis.raster._
-import geotrellis.raster.merge._
 import geotrellis.raster.prototype._
 import geotrellis.raster.stitch.Stitcher
 import geotrellis.layer._
@@ -57,7 +56,7 @@ abstract class SpatialTileLayoutRDDStitchMethods[
     val tiles = self.toCollection
     // From here down, this code duplicates SpatialTileLayoutCollectionStitchMethods.sparseStitch,
     // replacing self with tiles
-    if (tiles.headOption.isEmpty) {
+    if (tiles.isEmpty) {
       None
     } else {
       val tile = tiles.head._2

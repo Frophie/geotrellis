@@ -21,15 +21,15 @@ import geotrellis.proj4._
 import geotrellis.raster._
 import geotrellis.raster.io.geotiff.reader.GeoTiffReader
 import geotrellis.raster.reproject.{Reproject, ReprojectRasterExtent}
-import geotrellis.raster.resample.{NearestNeighbor, ResampleMethod}
-import geotrellis.raster.io.geotiff.{AutoHigherResolution, GeoTiff, GeoTiffMultibandTile, MultibandGeoTiff, OverviewStrategy, Tags}
+import geotrellis.raster.resample.ResampleMethod
+import geotrellis.raster.io.geotiff.{GeoTiff, GeoTiffMultibandTile, MultibandGeoTiff, OverviewStrategy, Tags}
 import geotrellis.util.RangeReader
 
 class GeoTiffResampleRasterSource(
   val dataPath: GeoTiffPath,
   val resampleTarget: ResampleTarget,
-  val method: ResampleMethod = NearestNeighbor,
-  val strategy: OverviewStrategy = AutoHigherResolution,
+  val method: ResampleMethod = ResampleMethod.DEFAULT,
+  val strategy: OverviewStrategy = OverviewStrategy.DEFAULT,
   private[raster] val targetCellType: Option[TargetCellType] = None,
   @transient private[raster] val baseTiff: Option[MultibandGeoTiff] = None
 ) extends RasterSource {
@@ -64,7 +64,7 @@ class GeoTiffResampleRasterSource(
   @transient private[raster] lazy val closestTiffOverview: GeoTiff[MultibandTile] =
     tiff.getClosestOverview(gridExtent.cellSize, strategy)
 
-  def reprojection(targetCRS: CRS, resampleTarget: ResampleTarget = DefaultTarget, method: ResampleMethod = NearestNeighbor, strategy: OverviewStrategy = AutoHigherResolution): GeoTiffReprojectRasterSource =
+  def reprojection(targetCRS: CRS, resampleTarget: ResampleTarget = DefaultTarget, method: ResampleMethod = ResampleMethod.DEFAULT, strategy: OverviewStrategy = OverviewStrategy.DEFAULT): GeoTiffReprojectRasterSource =
     new GeoTiffReprojectRasterSource(dataPath, targetCRS, resampleTarget, method, strategy, targetCellType = targetCellType) {
       override lazy val gridExtent: GridExtent[Long] = {
         val reprojectedRasterExtent =
@@ -74,13 +74,7 @@ class GeoTiffResampleRasterSource(
             Reproject.Options.DEFAULT.copy(method = resampleMethod, errorThreshold = errorThreshold)
           )
 
-        resampleTarget match {
-          case targetRegion: TargetRegion => targetRegion.region.toGridType[Long]
-          case targetAlignment: TargetAlignment => targetAlignment(reprojectedRasterExtent)
-          case targetDimensions: TargetDimensions => targetDimensions(reprojectedRasterExtent)
-          case targetCellSize: TargetCellSize => targetCellSize(reprojectedRasterExtent)
-          case _ => reprojectedRasterExtent
-        }
+        resampleTarget(reprojectedRasterExtent)
       }
     }
 
@@ -99,7 +93,7 @@ class GeoTiffResampleRasterSource(
   def read(bounds: GridBounds[Long], bands: Seq[Int]): Option[Raster[MultibandTile]] = {
     val it = readBounds(List(bounds), bands)
 
-    closestTiffOverview.synchronized { if (it.hasNext) Some(it.next) else None }
+    tiff.synchronized { if (it.hasNext) Some(it.next) else None }
   }
 
   override def readExtents(extents: Traversable[Extent], bands: Seq[Int]): Iterator[Raster[MultibandTile]] = {
@@ -117,27 +111,30 @@ class GeoTiffResampleRasterSource(
       targetPixelBounds <- queryPixelBounds.intersection(this.dimensions)
     } yield {
       val targetExtent = gridExtent.extentFor(targetPixelBounds)
-      val sourcePixelBounds = closestTiffOverview.rasterExtent.gridBoundsFor(targetExtent, clamp = true)
+      // buffer the targetExtent to read a buffered area from the source tiff
+      // so the resample would behave properly on borders
+      val bufferedTargetExtent = targetExtent.buffer(cellSize.width, cellSize.height)
+      val sourcePixelBounds = closestTiffOverview.rasterExtent.gridBoundsFor(bufferedTargetExtent)
       val targetRasterExtent = RasterExtent(targetExtent, targetPixelBounds.width.toInt, targetPixelBounds.height.toInt)
       (sourcePixelBounds, targetRasterExtent)
     }}.toMap
 
     geoTiffTile.crop(windows.keys.toSeq, bands.toArray).map { case (gb, tile) =>
       val targetRasterExtent = windows(gb)
-      Raster(
-        tile = tile,
-        extent = targetRasterExtent.extent
-      ).resample(targetRasterExtent.cols, targetRasterExtent.rows, method)
+      val sourceExtent = closestTiffOverview.rasterExtent.extentFor(gb, clamp = false)
+      Raster(tile, sourceExtent).resample(targetRasterExtent, method)
     }
   }
+
+  override def toString: String = s"GeoTiffResampleRasterSource(${dataPath.value}, $resampleTarget, $method)"
 }
 
 object GeoTiffResampleRasterSource {
   def apply(
     dataPath: GeoTiffPath,
     resampleTarget: ResampleTarget,
-    method: ResampleMethod = NearestNeighbor,
-    strategy: OverviewStrategy = AutoHigherResolution,
+    method: ResampleMethod = ResampleMethod.DEFAULT,
+    strategy: OverviewStrategy = OverviewStrategy.DEFAULT,
     targetCellType: Option[TargetCellType] = None,
     baseTiff: Option[MultibandGeoTiff] = None
   ): GeoTiffResampleRasterSource = new GeoTiffResampleRasterSource(dataPath, resampleTarget, method, strategy, targetCellType, baseTiff)

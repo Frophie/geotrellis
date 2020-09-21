@@ -29,7 +29,7 @@ import spire.syntax.fractional._
 import spire.syntax.cfor._
 
 import scala.collection.JavaConverters._
-import math.{min, max, ceil, floor}
+import math.{ceil, floor}
 
 
 /**
@@ -38,7 +38,7 @@ import math.{min, max, ceil, floor}
 object PolygonRasterizer {
   import scala.collection.mutable
   import java.util.{Arrays, Comparator}
-  import math.{abs,min,max}
+  import math.{min,max}
 
   type Segment = (Double, Double, Double, Double)
   type Interval = (Double, Double)
@@ -318,11 +318,16 @@ object PolygonRasterizer {
           )}
       })
 
-    interactions
+    interactions.map { edge: Segment =>
+      val topX = lineAxisIntersection(edge, top)._1
+      val bottomX = lineAxisIntersection(edge, bot)._1
+      val sortX = if (topX != Double.NegativeInfinity) topX
+      else if (bottomX != Double.NegativeInfinity) bottomX
+      else edge._1
+      (sortX, topX, bottomX, edge)
+    }
       .sortWith(_._1 < _._1)
-      .foreach({ edge =>
-        val topIntervalX = lineAxisIntersection(edge, top)._1
-        val botIntervalX = lineAxisIntersection(edge, bot)._1
+      .foreach({ case (_: Double, topIntervalX: Double, botIntervalX: Double, edge: Segment) =>
         val touchesTop = (topIntervalX != Double.NegativeInfinity)
         val touchesBot = (botIntervalX != Double.NegativeInfinity)
 

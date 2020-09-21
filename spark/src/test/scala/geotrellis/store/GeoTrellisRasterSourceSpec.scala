@@ -22,13 +22,14 @@ import geotrellis.raster.io.geotiff.{Auto, AutoHigherResolution, Base}
 import geotrellis.raster.io.geotiff.reader.GeoTiffReader
 import geotrellis.raster.testkit._
 import geotrellis.raster.MultibandTile
+import geotrellis.raster.reproject.{Reproject, ReprojectRasterExtent}
 import geotrellis.raster.resample.NearestNeighbor
-import geotrellis.store._
 import geotrellis.vector.Extent
 
-import org.scalatest._
+import org.scalatest.GivenWhenThen
+import org.scalatest.funspec.AnyFunSpec
 
-class GeoTrellisRasterSourceSpec extends FunSpec with RasterMatchers with GivenWhenThen with CatalogTestEnvironment {
+class GeoTrellisRasterSourceSpec extends AnyFunSpec with RasterMatchers with GivenWhenThen with CatalogTestEnvironment {
   val layerId = LayerId("landsat", 0)
   val uriMultibandNoParams = s"file://${TestCatalog.multibandOutputPath}"
   val uriMultiband = s"file://${TestCatalog.multibandOutputPath}?layer=${layerId.name}&zoom=${layerId.zoom}"
@@ -86,7 +87,7 @@ class GeoTrellisRasterSourceSpec extends FunSpec with RasterMatchers with GivenW
 
     it("should be able to read empty layer") {
       val bounds = GridBounds(9999, 9999, 10000, 10000).toGridType[Long]
-      assert(sourceMultiband.read(bounds) == None)
+      assert(sourceMultiband.read(bounds).isEmpty)
     }
 
     it("should be able to resample") {
@@ -101,6 +102,13 @@ class GeoTrellisRasterSourceSpec extends FunSpec with RasterMatchers with GivenW
       val resampledSource =
         sourceMultiband.resample(expected.tile.cols, expected.tile.rows, NearestNeighbor)
 
+      sourceMultiband.resolutions.length shouldBe sourceMultiband.attributeStore.availableZoomLevels(layerId.name).length
+      sourceMultiband.resolutions.length shouldBe resampledSource.resolutions.length
+
+      resampledSource.resolutions.zip(sourceMultiband.resolutions).map { case (rea, ree) =>
+        rea.resolution shouldBe ree.resolution +- 1e-7
+      }
+
       // resampledSource should have (dimensions (expected.tile.dimensions))
 
       val actual: Raster[MultibandTile] =
@@ -114,10 +122,42 @@ class GeoTrellisRasterSourceSpec extends FunSpec with RasterMatchers with GivenW
       }
     }
 
+    it("should be able to reproject") {
+      // read in the whole file and resample the pixels in memory
+      val etiff = GeoTiffReader.readMultiband(TestCatalog.filePath, streaming = false)
+      val expected: Raster[MultibandTile] =
+        etiff
+          .raster
+          .reproject(etiff.crs, LatLng)
+
+      val reprojectedSource = sourceMultiband.reproject(LatLng)
+
+      // checking that list of resolutions is resampled
+      val transform = Transform(sourceMultiband.crs, reprojectedSource.crs)
+
+      sourceMultiband.resolutions.length shouldBe sourceMultiband.attributeStore.availableZoomLevels(layerId.name).length
+      sourceMultiband.resolutions.length shouldBe reprojectedSource.resolutions.length
+      sourceMultiband.sourceLayers.length shouldBe reprojectedSource.resolutions.length
+
+      sourceMultiband.sourceLayers.zip(reprojectedSource.resolutions).map { case (layer, ecz) =>
+        ReprojectRasterExtent(layer.gridExtent, Transform(layer.metadata.crs, reprojectedSource.crs), Reproject.Options.DEFAULT).cellSize shouldBe ecz
+      }
+
+      val actual: Raster[MultibandTile] =
+        reprojectedSource
+          .resampleToGrid(expected.rasterExtent.toGridType[Long])
+          .read(expected.extent)
+          .get
+
+      withGeoTiffClue(actual, expected, reprojectedSource.crs)  {
+        assertRastersEqual(actual, expected)
+      }
+    }
+
     it("should have resolutions only for given layer name") {
       assert(
         sourceMultiband.resolutions.length ===
-          CollectionLayerReader(uriMultibandNoParams).attributeStore.layerIds.filter(_.name == layerId.name).length
+          CollectionLayerReader(uriMultibandNoParams).attributeStore.layerIds.count(_.name == layerId.name)
       )
       assert(
         new GeoTrellisRasterSource(s"$uriMultibandNoParams?layer=bogusLayer&zoom=0").resolutions.length === 0
@@ -136,42 +176,19 @@ class GeoTrellisRasterSourceSpec extends FunSpec with RasterMatchers with GivenW
 
       implicit def getoce(ge: GridExtent[Long]): CellSize = ge.cellSize
 
-      assert(GeoTrellisRasterSource.getClosestResolution(resolutions, cellSize1, AutoHigherResolution).get == rasterExtent1)
-      assert(GeoTrellisRasterSource.getClosestResolution(resolutions, cellSize2, AutoHigherResolution).get == rasterExtent2)
+      assert(GeoTrellisRasterSource.getClosestResolution(resolutions, cellSize1, AutoHigherResolution) == rasterExtent1)
+      assert(GeoTrellisRasterSource.getClosestResolution(resolutions, cellSize2, AutoHigherResolution) == rasterExtent2)
 
-      assert(GeoTrellisRasterSource.getClosestResolution(resolutions, cellSize1, Auto(0)).get == rasterExtent1)
-      assert(GeoTrellisRasterSource.getClosestResolution(resolutions, cellSize1, Auto(1)).get == rasterExtent2)
-      assert(GeoTrellisRasterSource.getClosestResolution(resolutions, cellSize1, Auto(2)).get == rasterExtent3)
+      assert(GeoTrellisRasterSource.getClosestResolution(resolutions, cellSize1, Auto(0)) == rasterExtent1)
+      assert(GeoTrellisRasterSource.getClosestResolution(resolutions, cellSize1, Auto(1)) == rasterExtent2)
+      assert(GeoTrellisRasterSource.getClosestResolution(resolutions, cellSize1, Auto(2)) == rasterExtent3)
       // do the best we can, we can't get index 3, so we get the closest:
       val res = GeoTrellisRasterSource.getClosestResolution(resolutions, cellSize1, Auto(3))
-      info (s"Auto(3): ${res.map(_.cellSize)}")
-      assert(res == Some(rasterExtent3))
+      assert(res == rasterExtent3)
 
       val resBase = GeoTrellisRasterSource.getClosestResolution(resolutions, cellSize1, Base)
-      info(s"Base: ${resBase.map(_.cellSize)}")
-      assert(resBase == Some(rasterExtent1))
+      assert(resBase == rasterExtent1)
     }
-
-    // it("should get the closest layer") {
-    //   val extent = Extent(0.0, 0.0, 10.0, 10.0)
-    //   val rasterExtent1 = new GridExtent[Long](extent, 1.0, 1.0, 10, 10)
-    //   val rasterExtent2 = new GridExtent[Long](extent, 2.0, 2.0, 10, 10)
-    //   val rasterExtent3 = new GridExtent[Long](extent, 4.0, 4.0, 10, 10)
-
-    //   val resolutions = List(rasterExtent1, rasterExtent2, rasterExtent3)
-
-    //   val layerId1 = LayerId("foo", 0)
-    //   val layerId2 = LayerId("foo", 1)
-    //   val layerId3 = LayerId("foo", 2)
-    //   val layerIds = List(layerId1, layerId2, layerId3)
-
-    //   val cellSize = CellSize(1.0, 1.0)
-
-    //   implicit def getoce(ge: GridExtent[Long]): CellSize = ge.cellSize
-    //   assert(GeoTrellisRasterSource.getClosestLayer(resolutions, layerIds, layerId3, cellSize) == layerId1)
-    //   assert(GeoTrellisRasterSource.getClosestLayer(List(), List(), layerId3, cellSize) == layerId3)
-    //   assert(GeoTrellisRasterSource.getClosestLayer(resolutions, List(), layerId3, cellSize) == layerId3)
-    // }
 
     it("should reproject") {
       val targetCRS = WebMercator

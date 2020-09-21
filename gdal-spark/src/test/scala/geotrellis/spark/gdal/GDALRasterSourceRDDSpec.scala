@@ -24,7 +24,6 @@ import geotrellis.proj4._
 import geotrellis.raster._
 import geotrellis.raster.io.geotiff._
 import geotrellis.spark._
-import geotrellis.spark.partition._
 import geotrellis.spark.store.hadoop._
 import geotrellis.spark.testkit._
 import geotrellis.store.hadoop._
@@ -33,13 +32,15 @@ import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import spire.syntax.cfor._
 import org.apache.spark.rdd.RDD
+
 import org.scalatest.Inspectors._
-import org.scalatest._
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.funspec.AnyFunSpec
 
 import java.util.concurrent.Executors
 import scala.concurrent.ExecutionContext
 
-class GDALRasterSourceRDDSpec extends FunSpec with TestEnvironment with BeforeAndAfterAll {
+class GDALRasterSourceRDDSpec extends AnyFunSpec with TestEnvironment with BeforeAndAfterAll {
   import geotrellis.GDALTestUtils._
 
   val uri = gdalGeoTiffPath("vlm/aspect-tiled.tif")
@@ -143,8 +144,9 @@ class GDALRasterSourceRDDSpec extends FunSpec with TestEnvironment with BeforeAn
     }
 
     it("should reproduce tileToLayout followed by reproject") {
+      val reprojectedRasterSource = rasterSource.reprojectToGrid(targetCRS, layout)
       val reprojectedSourceRDD: MultibandTileLayerRDD[SpatialKey] =
-        RasterSourceRDD.spatial(rasterSource.reprojectToGrid(targetCRS, layout), layout)
+        RasterSourceRDD.spatial(Seq(reprojectedRasterSource), layout)
 
       // geotrellis.raster.io.geotiff.GeoTiff(reprojectedExpectedRDD.stitch, targetCRS).write("/tmp/expected.tif")
       // geotrellis.raster.io.geotiff.GeoTiff(reprojectedSourceRDD.stitch, targetCRS).write("/tmp/actual.tif")
@@ -207,7 +209,7 @@ class GDALRasterSourceRDDSpec extends FunSpec with TestEnvironment with BeforeAn
         assertRDDLayersEqual(reprojectedExpectedRDDGDAL, reprojectedSourceRDD, true)
       }
 
-      def parellSpec(n: Int = 1000)(implicit cs: ContextShift[IO]): List[RasterSource] = {
+      def parallelSpec(n: Int = 1000)(implicit cs: ContextShift[IO]): List[RasterSource] = {
         println(java.lang.Thread.activeCount())
 
         /** Functions to trigger Datasets computation */
@@ -277,7 +279,7 @@ class GDALRasterSourceRDDSpec extends FunSpec with TestEnvironment with BeforeAn
         val i = 1000
         implicit val cs = IO.contextShift(ExecutionContext.global)
 
-        val res = parellSpec(i)
+        val res = parallelSpec(i)
       }
 
       it(s"should not fail on parallelization with a fixed thread pool") {
@@ -287,7 +289,7 @@ class GDALRasterSourceRDDSpec extends FunSpec with TestEnvironment with BeforeAn
         val ec = ExecutionContext.fromExecutor(pool)
         implicit val cs = IO.contextShift(ec)
 
-        val res = parellSpec(i)
+        val res = parallelSpec(i)
       }
     }
   }

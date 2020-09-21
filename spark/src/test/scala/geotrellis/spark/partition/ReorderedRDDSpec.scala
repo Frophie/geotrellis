@@ -17,15 +17,13 @@
 package geotrellis.spark.partition
 
 import geotrellis.layer._
-import geotrellis.store.index.zcurve._
-import geotrellis.spark._
 import geotrellis.spark.testkit._
+import org.apache.spark.rdd.RDD
 
-import org.apache.spark.Partitioner
-import org.apache.spark.rdd.{PairRDDFunctions, RDD}
-import org.scalatest._
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.funspec.AnyFunSpec
 
-class ReorderedRDDSpec extends FunSpec with Matchers with TestEnvironment {
+class ReorderedRDDSpec extends AnyFunSpec with Matchers with TestEnvironment {
   import TestImplicits._
 
   val bounds1 = KeyBounds(SpatialKey(0,0), SpatialKey(10,10))
@@ -49,7 +47,10 @@ class ReorderedRDDSpec extends FunSpec with Matchers with TestEnvironment {
 
   it("should reorder partitions"){
     val res = new ReorderedSpaceRDD(rdd1, SpacePartitioner(bounds2))
-    res.collect() should not be empty
+    val keys = res.collect().map(r => r._1)
+    // Key range of `bounds2` covers `5 to 10` ranges, but `4` is in same partition of `5`, so it's also covered
+    val expected = for {c <- 4 to 10; r <- 4 to 10} yield SpatialKey(c, r)
+    keys should contain theSameElementsAs expected
   }
 
   it("should reorder to empty"){
@@ -66,5 +67,13 @@ class ReorderedRDDSpec extends FunSpec with Matchers with TestEnvironment {
       part.asInstanceOf[ReorderedPartition].parentPartition should be (None)
     }
     res.collect() shouldBe empty
+  }
+
+  it("should fail when different spatial region indexers are in play") {
+    val customPartitioner = CustomPartitioning.getCustomSpacePartitioner(bounds2)
+    customPartitioner.hasSameIndex(rdd1.partitioner.get.asInstanceOf[SpacePartitioner[SpatialKey]]) shouldBe false
+    val key = SpatialKey(1, 2)
+    part1.index.toIndex(key) should not be customPartitioner.index.toIndex(key)
+    an [IllegalArgumentException] should be thrownBy new ReorderedSpaceRDD(rdd1, customPartitioner)
   }
 }

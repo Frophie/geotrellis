@@ -19,12 +19,12 @@ package geotrellis.raster
 import geotrellis.raster.ArrayTileSpec.{BiasedAdd, CountData}
 import geotrellis.raster.mapalgebra.local.{Add, LocalTileBinaryOp}
 import geotrellis.raster.testkit._
-import org.scalatest._
 
-class ArrayTileSpec extends FunSpec
-                  with Matchers
-                  with RasterMatchers
-                  with TileBuilders {
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.funspec.AnyFunSpec
+
+class ArrayTileSpec extends AnyFunSpec with Matchers with RasterMatchers with TileBuilders {
+
   describe("ArrayTile.convert from a DoubleCellType source tile") {
     val arr = Array(0.0, 1.0, -1.0, Double.NaN)
     val sourceTile = DoubleArrayTile(arr, 2, 2, DoubleCellType)
@@ -236,6 +236,61 @@ class ArrayTileSpec extends FunSpec
         CountData(BiasedAdd(d2, d1)) should be (4L)
       }
     }
+
+    it("should combine with non-commutative functions (minus)") {
+
+      withClue("IntArrayTile") {
+        val at = IntArrayTile(Array.ofDim[Int](100 * 100).fill(50), 100, 100)
+        val other = IntArrayTile(Array.ofDim[Int](100 * 100).fill(11), 100, 100)
+        val expected = IntConstantTile(39, 100, 100)
+
+        assertEqual(at.combine(other)((z1, z2) => z1 - z2), expected)
+      }
+
+      withClue("constant IntArrayTile") {
+        val at = IntArrayTile(Array.ofDim[Int](100 * 100).fill(50), 100, 100)
+        val other = IntConstantTile(11, 100, 100)
+        val expected = IntConstantTile(39, 100, 100)
+
+        assertEqual(at.combine(other)((z1, z2) => z1 - z2), expected)
+      }
+
+      withClue("composite Int Tile") {
+        val at = IntArrayTile(Array.ofDim[Int](100 * 100).fill(50), 100, 100)
+        val tl = TileLayout(2, 2, 50, 50)
+        val other = CompositeTile(Seq(11, 22, 33, 44).map { v => IntConstantTile(v, 50, 50) }, tl)
+        val expected = CompositeTile(Seq(39, 28, 17, 6).map { v => IntConstantTile(v, 50, 50) }, tl)
+
+        assertEqual(at.combine(other)((z1, z2) => z1 - z2), expected)
+      }
+
+      withClue("DoubleArrayTile") {
+        val at = DoubleArrayTile(Array.ofDim[Double](100 * 100).fill(50), 100, 100)
+        val other = DoubleArrayTile(Array.ofDim[Double](100 * 100).fill(11.1), 100, 100)
+        val expected = DoubleConstantTile(38.9, 100, 100)
+
+        assertEqual(at.combineDouble(other)((z1, z2) => z1 - z2), expected)
+      }
+
+      withClue("constant DoubleArrayTile") {
+        val at = DoubleArrayTile(Array.ofDim[Double](100 * 100).fill(50), 100, 100)
+        val other = DoubleConstantTile(11.1, 100, 100)
+        val expected = DoubleConstantTile(38.9, 100, 100)
+
+        assertEqual(at.combineDouble(other)((z1, z2) => z1 - z2), expected)
+      }
+
+      withClue("composite Double Tile") {
+        val at = DoubleArrayTile(Array.ofDim[Double](100 * 100).fill(50), 100, 100)
+        val tl = TileLayout(2, 2, 50, 50)
+        val other = CompositeTile(Seq(11.1, 22.2, 33.3, 44.4).map { v => DoubleConstantTile(v, 50, 50) }, tl)
+        val expected = CompositeTile(Seq(38.9, 27.8, 16.7, 5.6).map { v => DoubleConstantTile(v, 50, 50) }, tl)
+
+        assertEqual(at.combineDouble(other)((z1, z2) => z1 - z2), expected)
+      }
+
+    }
+
   }
 
   describe("ArrayTile equality") {
@@ -257,6 +312,26 @@ class ArrayTileSpec extends FunSpec
       val other = IntArrayTile(Array.ofDim[Int](4 * 4).fill(0), 4, 4)
 
       assert(at == other)
+    }
+
+    // https://github.com/locationtech/geotrellis/issues/3242
+    it("ArrayTile equals method should compare arrays with the First NaN correct") {
+      val arr1 = Array(NaN, 0.5, 0.9, 0.4)
+      val tile1 = ArrayTile.apply(arr1, 2, 2)
+
+      val arr2 = Array(NaN, NaN, NaN, NaN)
+      val tile2 = ArrayTile.apply(arr2, 2, 2)
+
+      assert(tile1 != tile2)
+    }
+  }
+
+  describe("ArrayTile cellType combine") {
+    it("should union cellTypes") {
+      val int = IntArrayTile(Array.ofDim[Int](2).fill(0), 1, 1)
+      val dt = DoubleArrayTile(Array.ofDim[Double](2).fill(0), 1, 1)
+
+      int.combine(dt)(_ + _).cellType shouldBe int.cellType.union(dt.cellType)
     }
   }
 }

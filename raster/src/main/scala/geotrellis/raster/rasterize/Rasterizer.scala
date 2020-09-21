@@ -22,9 +22,7 @@ import geotrellis.raster.rasterize.polygon.PolygonRasterizer
 import geotrellis.util.Constants.{DOUBLE_EPSILON => EPSILON}
 import geotrellis.vector._
 
-import spire.syntax.cfor._
 
-import scala.language.higherKinds
 
 
 trait Transformer[+B] {
@@ -59,14 +57,14 @@ object Rasterizer {
     * @param rasterExtent  Definition of raster to create
     * @param value         Single value to burn
     */
-  def rasterizeWithValue(geom: Geometry, rasterExtent: RasterExtent, value: Int): Tile = {
-    val cols = rasterExtent.cols
-    val array = Array.ofDim[Int](rasterExtent.cols * rasterExtent.rows).fill(NODATA)
-    val f2 = (col: Int, row: Int) =>
-          array(row * cols + col) = value
-    foreachCellByGeometry(geom, rasterExtent)(f2)
-    ArrayTile(array, rasterExtent.cols, rasterExtent.rows)
-  }
+  def rasterizeWithValue(geom: Geometry, rasterExtent: RasterExtent, value: Int): Tile =
+    if(geom.isValid) {
+      val cols = rasterExtent.cols
+      val array = Array.ofDim[Int](rasterExtent.cols * rasterExtent.rows).fill(NODATA)
+      val f2 = (col: Int, row: Int) => array(row * cols + col) = value
+      foreachCellByGeometry(geom, rasterExtent)(f2)
+      ArrayTile(array, rasterExtent.cols, rasterExtent.rows)
+    } else throw new IllegalArgumentException("Cannot rasterize an invalid polygon")
 
   /**
     * Create a raster from a geometry feature.
@@ -75,14 +73,15 @@ object Rasterizer {
     * @param rasterExtent  Definition of raster to create
     * @param f             Function that takes col, row, feature and returns value to burn
     */
-  def rasterize(feature: Geometry, rasterExtent: RasterExtent)(f: (Int, Int) => Int) = {
-    val cols = rasterExtent.cols
-    val array = Array.ofDim[Int](rasterExtent.cols * rasterExtent.rows).fill(NODATA)
-    val f2 = (col: Int, row: Int) =>
-          array(row * cols + col) = f(col, row)
-    foreachCellByGeometry(feature, rasterExtent)(f2)
-    ArrayTile(array, rasterExtent.cols, rasterExtent.rows)
-  }
+  def rasterize(feature: Geometry, rasterExtent: RasterExtent)(f: (Int, Int) => Int) =
+    if(feature.isValid) {
+      val cols = rasterExtent.cols
+      val array = Array.ofDim[Int](rasterExtent.cols * rasterExtent.rows).fill(NODATA)
+      val f2 = (col: Int, row: Int) =>
+        array(row * cols + col) = f(col, row)
+      foreachCellByGeometry(feature, rasterExtent)(f2)
+      ArrayTile(array, rasterExtent.cols, rasterExtent.rows)
+    } else throw new IllegalArgumentException("Cannot rasterize an invalid polygon")
 
   /**
     * Given a Geometry and a [[RasterExtent]], call the function 'f'

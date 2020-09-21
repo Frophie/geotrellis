@@ -18,11 +18,8 @@ package geotrellis.raster.io.geotiff
 
 import geotrellis.raster._
 import geotrellis.raster.io.geotiff.compression._
-import geotrellis.raster.resample.ResampleMethod
 import geotrellis.raster.split._
-import geotrellis.vector.Extent
 
-import java.util.BitSet
 
 import spire.syntax.cfor._
 
@@ -616,7 +613,7 @@ abstract class GeoTiffTile(
           compressor.createDecompressor(),
           segmentLayout,
           compression,
-          cellType,
+          cellType.union(other.cellType),
           overviews = overviews
         )
       case _ =>
@@ -806,4 +803,6 @@ abstract class GeoTiffTile(
    */
   def toBytes(): Array[Byte] =
     toArrayTile.toBytes
+
+  override def toString: String = s"GeoTiffTile($cols,$rows,$cellType)"
 }

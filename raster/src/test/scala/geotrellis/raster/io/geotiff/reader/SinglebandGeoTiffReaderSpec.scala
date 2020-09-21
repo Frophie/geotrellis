@@ -19,15 +19,12 @@ package geotrellis.raster.io.geotiff.reader
 import geotrellis.raster._
 import geotrellis.raster.io.geotiff._
 import geotrellis.raster.testkit._
-import geotrellis.util.Filesystem
 
 import spire.syntax.cfor._
-import org.scalatest._
 
-class SinglebandGeoTiffReaderSpec extends FunSpec
-    with RasterMatchers
-    with GeoTiffTestUtils {
+import org.scalatest.funspec.AnyFunSpec
 
+class SinglebandGeoTiffReaderSpec extends AnyFunSpec with RasterMatchers with GeoTiffTestUtils {
   def geoTiff(storage: String, cellType: String): SinglebandGeoTiff =
     SinglebandGeoTiff(geoTiffPath(s"uncompressed/$storage/${cellType}.tif"))
 
@@ -123,6 +120,28 @@ class SinglebandGeoTiffReaderSpec extends FunSpec
       val tile = tiff.tile
 
       tiff.getOverviewsCount should be (5)
+      tile.isNoDataTile should be (false)
+
+      tile.cols -> tile.rows should be (sizes(0))
+
+      tiff.overviews.zip(sizes.tail).foreach { case (ovrTiff, ovrSize) =>
+        val ovrTile = ovrTiff.tile
+
+        ovrTiff.getOverviewsCount should be (0)
+        ovrTile.isNoDataTile should be (false)
+
+        ovrTile.cols -> ovrTile.rows should be (ovrSize)
+      }
+    }
+
+    it("should read tiff with masks and mask overviews correct (skip everything that is not a reduced image)") {
+      // sizes of overviews, starting with the base ifd
+      val sizes = List(1024 -> 1024, 512 -> 512)
+
+      val tiff = SinglebandGeoTiff(geoTiffPath("overviews/per-dataset-mask.tif"))
+      val tile = tiff.tile
+
+      tiff.getOverviewsCount should be (1)
       tile.isNoDataTile should be (false)
 
       tile.cols -> tile.rows should be (sizes(0))

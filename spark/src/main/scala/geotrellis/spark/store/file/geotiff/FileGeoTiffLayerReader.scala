@@ -18,14 +18,11 @@ package geotrellis.spark.store.file.geotiff
 
 import geotrellis.layer.ZoomedLayoutScheme
 import geotrellis.raster.resample.{NearestNeighbor, ResampleMethod}
-import geotrellis.raster.io.geotiff.{AutoHigherResolution, OverviewStrategy}
-import geotrellis.store.file.cog.byteReader
+import geotrellis.raster.io.geotiff.OverviewStrategy
 import geotrellis.spark.store.hadoop.geotiff._
 import geotrellis.store.util.BlockingThreadPool
-import geotrellis.util.ByteReader
 import geotrellis.util.annotations.experimental
 
-import java.net.URI
 
 import scala.concurrent.ExecutionContext
 
@@ -36,7 +33,7 @@ import scala.concurrent.ExecutionContext
   val attributeStore: AttributeStore[M, GeoTiffMetadata],
   val layoutScheme: ZoomedLayoutScheme,
   val resampleMethod: ResampleMethod = NearestNeighbor,
-  val strategy: OverviewStrategy = AutoHigherResolution,
+  val strategy: OverviewStrategy = OverviewStrategy.DEFAULT,
   executionContext: => ExecutionContext = BlockingThreadPool.executionContext
 ) extends GeoTiffLayerReader[M] {
   implicit lazy val ec: ExecutionContext = executionContext
@@ -47,7 +44,7 @@ import scala.concurrent.ExecutionContext
     attributeStore: AttributeStore[M, GeoTiffMetadata],
     layoutScheme: ZoomedLayoutScheme,
     resampleMethod: ResampleMethod = NearestNeighbor,
-    strategy: OverviewStrategy = AutoHigherResolution,
+    strategy: OverviewStrategy = OverviewStrategy.DEFAULT,
     executionContext: => ExecutionContext = BlockingThreadPool.executionContext
   ): FileGeoTiffLayerReader[M] =
     new FileGeoTiffLayerReader(attributeStore, layoutScheme, resampleMethod, strategy, executionContext)

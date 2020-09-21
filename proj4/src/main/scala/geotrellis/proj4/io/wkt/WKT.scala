@@ -16,6 +16,8 @@
 
 package geotrellis.proj4.io.wkt
 
+import geotrellis.proj4.CRS
+
 import scala.io.Source
 
 object WKT {
@@ -41,9 +43,7 @@ object WKT {
     }
   }
 
-  def contains(input: WktCS): Boolean = {
-    projections contains input
-  }
+  def contains(input: WktCS): Boolean = projections contains input
 
   /**
     * Returns an EPSG code given a WKT string
@@ -51,10 +51,20 @@ object WKT {
     * @return
     */
   def getEpsgCode(wktString: String): Option[Int] = {
-    val wktParsed = WKTParser(wktString)
-    parsed.find{
-      case (_, wkt) => wkt == wktParsed
-    }.map(_._1)
+    WKTParser.parse(wktString).toOption.flatMap { wktParsed =>
+      val db = parsed.find { case (_, wkt) => wkt == wktParsed }.map(_._1)
+      if (db.nonEmpty) db
+      else
+        wktParsed match {
+          case wkt: ProjCS =>
+            wkt.extension.flatMap {
+              case ExtensionProj4(proj4String) =>
+                CRS.fromString(proj4String).epsgCode
+              case _ => None
+            }
+          case _ => None
+        }
+    }
   }
 
   /**
@@ -62,18 +72,16 @@ object WKT {
     * @param wktString
     * @return
     */
-  def getEpsgStringCode(wktString: String): Option[String] = {
+  def getEpsgStringCode(wktString: String): Option[String] =
     getEpsgCode(wktString).map(c => s"EPSG:${c.toString}")
-  }
 
   /**
     * Returns the WKT string for the given EPSG code
     * @param input The EPSG code, e.g. 4326
     * @return
     */
-  def fromEpsgCode(input: Int): Option[String] = {
-    records.get(input).map(_.toString)
-  }
+  def fromEpsgCode(input: Int): Option[String] =
+    records.get(input)
 
   def withWktFile[T](f: Iterator[String] => T): T = {
     val stream = getClass.getResourceAsStream(wktResourcePath)

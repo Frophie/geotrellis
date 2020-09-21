@@ -18,7 +18,6 @@ package geotrellis.raster
 
 import geotrellis.vector.Point
 import geotrellis.vector._
-import geotrellis.raster.rasterize.Rasterizer
 import geotrellis.util.{MethodExtensions, np}
 
 object Implicits extends Implicits
@@ -127,5 +126,4 @@ trait Implicits
   }
 
   implicit class withCellFeaturesMethods[R](val self: R) extends CellFeatures.Methods[R]
-
 }

@@ -6,16 +6,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Fix `Encoder[GeometryCollection]` including subclasses of GeometryCollection twice in the json
+   (MultiPolygon, Multipoint,MultiLinestring) [#3167](https://github.com/locationtech/geotrellis/issues/3167)
+
+## [3.5.0] - 2020-08-18
+
+### Added
+- Add alternative RasterizeRDD methods for keyed geometries or features [#3271](https://github.com/locationtech/geotrellis/pull/3271)
+
+### Changed
+- Fix NoData handling in the ColorMethods.color function for the RGB and RGBA Multiband Rasters [#3278](https://github.com/locationtech/geotrellis/pull/3278)
+- Fix renderJpg() color is bluer than expected [#3203](https://github.com/locationtech/geotrellis/issues/3203)
+- Fix combineDouble of ArrayTile and ConstantTile with non-commutative operator [#3257](https://github.com/locationtech/geotrellis/issues/3257)
+- Update GDAL up to 3.1 [#3279](https://github.com/locationtech/geotrellis/pull/3279)
+- Fix GeoTiff writer does not currently support WebMercator projection with no EPSG code set [#3281](https://github.com/locationtech/geotrellis/issues/3281)
+- Fix Tile combine should union cellTypes [#3284](https://github.com/locationtech/geotrellis/pull/3284)
+- Fix CRS.fromWKT function throws [#3209](https://github.com/locationtech/geotrellis/issues/3209)
+
+## [3.4.1] - 2020-07-16
+
+### Changed
+- GeoTiffRasterSource is not threadsafe enough [#3265](https://github.com/locationtech/geotrellis/pull/3265)
+- Fix ShortArrayTileResult result ArrayTile fulfillment [#3268](https://github.com/locationtech/geotrellis/pull/3268)
+- GeoTiffRasterSource TiledToLayout reads by SpatialKey can produce non-256x256 tiles [3267](https://github.com/locationtech/geotrellis/issues/3267)
+- Fix Overviews Read Incorrectly when Per Dataset Masks Present [#3269](https://github.com/locationtech/geotrellis/issues/3269)
+
+## [3.4.0] - 2020-06-19
+
+### Added
+- Add GS in the list of supported URI schemes [#3235](https://github.com/locationtech/geotrellis/pull/3235)
+- WKT Proj4 Extension support [#3241](https://github.com/locationtech/geotrellis/issues/3241)
+
+### Changed
+- Fix GeoTrellisRasterSources to properly pass time though all the internal functions [#3226](https://github.com/locationtech/geotrellis/pull/3226)
+- Move GDAL overview strategy logger to debug level [#3230](https://github.com/locationtech/geotrellis/pull/3230)
+- Fix S3RDDLayerReader partitioning [#3231](https://github.com/locationtech/geotrellis/pull/3231)
+- GDALRasterSource works inconsistenly with BitCellType and ByteCellType [#3232](https://github.com/locationtech/geotrellis/issues/3232)
+- rasterizeWithValue accepts only topologically valid polygons [#3236](https://github.com/locationtech/geotrellis/pull/3236)
+- Rasterizer.rasterize should be consistent with rasterizeWithValue [#3238](https://github.com/locationtech/geotrellis/pull/3238)
+- GeoTrellisRasterSource should return None on empty reads [#3240](https://github.com/locationtech/geotrellis/pull/3240) 
+- ArrayTile equals method always returns true if first elements are NaN [#3242](https://github.com/locationtech/geotrellis/issues/3242)
+- Fixed resource issue with JpegDecompressor that was causing a "too many open files in the system" exception on many parallel reads of JPEG compressed GeoTiffs. [#3249](https://github.com/locationtech/geotrellis/pull/3249)
+- Fix MosaicRasterSource, GDALRasterSource and GeoTiffResampleRasterSource behavior [#3252](https://github.com/locationtech/geotrellis/pull/3252)
+- HttpRangeReader should live outside of the Spark package [#3254](https://github.com/locationtech/geotrellis/issues/3254)
+- HttpRangeReader moved to `geotrellis.util [#3256](https://github.com/locationtech/geotrellis/issues/3256)
+- Consistently construct GridExtents with `math.round` [#3248](https://github.com/locationtech/geotrellis/issues/3248)
+
+## [3.3.0] - 2020-04-07
+
 ### Added
 
 - GeoTrellisPath assumes `file` scheme when none provided [#3191](https://github.com/locationtech/geotrellis/pull/3191)
+- toStrings overrides to common classes [#3217](https://github.com/locationtech/geotrellis/pull/3217)
+- GeoTrellisRasterSources legacy and temporal layers support [#3179](https://github.com/locationtech/geotrellis/issues/3179)
 
 ### Changed
 
+- Fix `OverviewStrategy` instances now define their own overview selection logic and more accurately port GDAL-Warp -ovr options [#3196](https://github.com/locationtech/geotrellis/issues/3196)
 - Fix `PolygonRasterizer` failure on some inputs [#3160](https://github.com/locationtech/geotrellis/issues/3160)
 - Fix GeoTiff Byte and UByte CellType conversions [#3189](https://github.com/locationtech/geotrellis/issues/3189)
 - Fix incorrect parsing of authority in GeoTrellisPath [#3191](https://github.com/locationtech/geotrellis/pull/3191)
 - GeoTrellisPath.zoomLevel is now `Option[Int]` -> `Int` to better indicate that it is a required parameter [#3191](https://github.com/locationtech/geotrellis/pull/3191)
+- Fix the length of one degree at the equator in metres [#3197](https://github.com/locationtech/geotrellis/pull/3197)
+- Fix Fix DelaunayRasterizer [#3202](https://github.com/locationtech/geotrellis/pull/3202)
+- RasterSources resolutions should be consistent across implementations [#3210](https://github.com/locationtech/geotrellis/issues/3210)
+- Bump gdal-warp-bindings version up to 1.0.0 [#3211](https://github.com/locationtech/geotrellis/pull/3211)
+- Fixed GDALRasterSource.resample method behavior to respect the passed resampleMethod [#3211](https://github.com/locationtech/geotrellis/pull/3211)
+- Fix Jackson dependencies [#3212](https://github.com/locationtech/geotrellis/issues/3212)
+- Fix Rasterizer for polygons containing concavities whith `PixelIsArea` option [#3192](https://github.com/locationtech/geotrellis/pull/3192)
+- Fix spatial join (Spark) when using different partitioning in left and right RDDs [#3175](https://github.com/locationtech/geotrellis/pull/3175)
+- Fix Monad instance for `PolygonalSummaryResult` [#3221](https://github.com/locationtech/geotrellis/pull/3221)
 
 ### Removed
 
@@ -1028,3 +1089,25 @@ efficiently using the layer query API.
 - Save and load geometry and feature data to and from PostGIS using
   the slick scala database library.
 - Perform PostGIS `ST_` operations in PostGIS through scala.
+
+[Unreleased]: https://github.com/locationtech/geotrellis/compare/v3.5.0...HEAD
+[3.5.0]: https://github.com/locationtech/geotrellis/compare/v3.4.1...v3.5.0
+[3.4.1]: https://github.com/locationtech/geotrellis/compare/v3.4.0...v3.4.1
+[3.4.0]: https://github.com/locationtech/geotrellis/compare/v3.3.0...v3.4.0
+[3.3.0]: https://github.com/locationtech/geotrellis/compare/v3.2.0...v3.3.0
+[3.2.0]: https://github.com/locationtech/geotrellis/compare/v3.1.0...v3.2.0
+[3.1.0]: https://github.com/locationtech/geotrellis/compare/v3.0.0...v3.1.0
+[3.0.0]: https://github.com/locationtech/geotrellis/compare/v2.3.0...v3.0.0
+[2.3.0]: https://github.com/locationtech/geotrellis/compare/v2.2.0...v2.3.0
+[2.2.0]: https://github.com/locationtech/geotrellis/compare/v2.1.0...v2.2.0
+[2.1.0]: https://github.com/locationtech/geotrellis/compare/v2.0.0...v2.1.0
+[2.0.0]: https://github.com/locationtech/geotrellis/compare/v1.2.1...v2.0.0
+[1.2.1]: https://github.com/locationtech/geotrellis/compare/v1.2.0...v1.2.1
+[1.2.1]: https://github.com/locationtech/geotrellis/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/locationtech/geotrellis/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/locationtech/geotrellis/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/locationtech/geotrellis/compare/v0.10.3...v1.0.0
+[0.10.3]: https://github.com/locationtech/geotrellis/compare/v0.10.2...v0.10.3
+[0.10.2]: https://github.com/locationtech/geotrellis/compare/v0.10.1...v0.10.2
+[0.10.1]: https://github.com/locationtech/geotrellis/compare/v0.10.0...v0.10.1
+[0.10.0]: https://github.com/locationtech/geotrellis/compare/v0.9.0...v0.10.0

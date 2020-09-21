@@ -19,7 +19,7 @@ package geotrellis.raster.geotiff
 import geotrellis.vector._
 import geotrellis.proj4._
 import geotrellis.raster._
-import geotrellis.raster.resample.{NearestNeighbor, ResampleMethod}
+import geotrellis.raster.resample.ResampleMethod
 import geotrellis.raster.io.geotiff._
 import geotrellis.raster.io.geotiff.reader.GeoTiffReader
 import geotrellis.util.RangeReader
@@ -55,7 +55,7 @@ class GeoTiffRasterSource(
   lazy val gridExtent: GridExtent[Long] = tiff.rasterExtent.toGridType[Long]
   lazy val resolutions: List[CellSize] = cellSize :: tiff.overviews.map(_.cellSize)
 
-  def reprojection(targetCRS: CRS, resampleTarget: ResampleTarget = DefaultTarget, method: ResampleMethod = NearestNeighbor, strategy: OverviewStrategy = AutoHigherResolution): GeoTiffReprojectRasterSource =
+  def reprojection(targetCRS: CRS, resampleTarget: ResampleTarget = DefaultTarget, method: ResampleMethod = ResampleMethod.DEFAULT, strategy: OverviewStrategy = OverviewStrategy.DEFAULT): GeoTiffReprojectRasterSource =
     GeoTiffReprojectRasterSource(dataPath, targetCRS, resampleTarget, method, strategy, targetCellType = targetCellType, baseTiff = Some(tiff))
 
   def resample(resampleTarget: ResampleTarget, method: ResampleMethod, strategy: OverviewStrategy): GeoTiffResampleRasterSource =
@@ -85,8 +85,7 @@ class GeoTiffRasterSource(
   }
 
   override def readExtents(extents: Traversable[Extent], bands: Seq[Int]): Iterator[Raster[MultibandTile]] = {
-    val bounds = extents.map(gridExtent.gridBoundsFor(_, clamp = true))
-
+    val bounds = extents.map(gridExtent.gridBoundsFor(_))
     readBounds(bounds, bands)
   }
 
@@ -96,9 +95,11 @@ class GeoTiffRasterSource(
       bounds.flatMap(_.intersection(this.dimensions)).toSeq.map(_.toGridType[Int])
 
     geoTiffTile.crop(intersectingBounds, bands.toArray).map { case (gb, tile) =>
-      convertRaster(Raster(tile, gridExtent.extentFor(gb.toGridType[Long], clamp = true)))
+      convertRaster(Raster(tile, gridExtent.extentFor(gb.toGridType[Long])))
     }
   }
+
+  override def toString: String = s"GeoTiffRasterSource(${dataPath.value})"
 }
 
 object GeoTiffRasterSource {

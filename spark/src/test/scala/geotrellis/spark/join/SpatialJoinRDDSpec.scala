@@ -23,10 +23,11 @@ import geotrellis.spark.testkit._
 
 import org.apache.spark.Partitioner
 import org.apache.spark.rdd.{PairRDDFunctions, RDD}
-import org.scalatest._
-import spire.math.interval.EmptyBound
 
-class SpatialJoinRDDSpec extends FunSpec with Matchers with TestEnvironment {
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.funspec.AnyFunSpec
+
+class SpatialJoinRDDSpec extends AnyFunSpec with Matchers with TestEnvironment {
   // Import the PartitionerIndex that we will be using for the tests.
   import geotrellis.spark.partition.TestImplicits._
 
@@ -82,7 +83,7 @@ class SpatialJoinRDDSpec extends FunSpec with Matchers with TestEnvironment {
     info(s"SpaceRDD join partitioner: ${res.partitioner}")
     info(s"  number of partitions: ${res.partitions.length}")
     res.partitioner.get should be (part1)
-    res.collect() sameElements expected.collect()
+    res.collect() should contain theSameElementsAs expected.collect()
     maxPartitionSize(res) should be <= 4
   }
 
@@ -90,13 +91,13 @@ class SpatialJoinRDDSpec extends FunSpec with Matchers with TestEnvironment {
     val res = pr1.leftOuterJoin(pr3)
     val expected = pr1.mapValues(v => (v, None))
 
-    res.collect() sameElements expected.collect()
+    res.collect() should contain theSameElementsAs expected.collect()
   }
 
    it("left join to empty SpaceRDD") {
      val res = prEmpty.leftOuterJoin(pr3)
      val records = res.collect()
-     records sameElements Array[(SpatialKey, Int)]()
+     records shouldBe empty
      info("records: " + records.length)
    }
 
@@ -107,15 +108,37 @@ class SpatialJoinRDDSpec extends FunSpec with Matchers with TestEnvironment {
     info(s"PairRDDFunctions partitioner: ${expected.partitioner}")
     info(s"SpaceRDD join partitioner: ${res.partitioner}")
     res.partitioner.get should be equals SpacePartitioner(KeyBounds(SpatialKey(5,5), SpatialKey(10,10)))
-    res.collect() sameElements expected.collect()
+    res.collect() should contain theSameElementsAs expected.collect()
     maxPartitionSize(res) should be <= 4
   }
 
   it("inner join non intersecting rdds") {
     val res = pr1.join(pr3)
     val records =res.collect()
-    records sameElements Array[(SpatialKey, Int)]()
+    records shouldBe empty
     info("records: " + records.length)
+  }
+
+  it("left join with custom partitioner index") {
+    import geotrellis.spark.partition.CustomPartitioning
+    // Build contextRDDs with explicit partitioning
+    val pr1 = ContextRDD(rdd1.partitionBy(part1), part1.bounds)
+    val part2Custom = CustomPartitioning.getCustomSpacePartitioner(bounds2)
+    val pr2Custom = ContextRDD(rdd2.partitionBy(part2Custom), part2Custom.bounds)
+    val expected = new PairRDDFunctions(rdd1).leftOuterJoin(rdd2)
+    val res = pr1.spatialLeftOuterJoin(pr2Custom)
+    res.collect() should contain theSameElementsAs expected.collect()
+  }
+
+  it("join with custom partitioner index") {
+    import geotrellis.spark.partition.CustomPartitioning
+    // Build contextRDDs with explicit partitioning
+    val pr1 = ContextRDD(rdd1.partitionBy(part1), part1.bounds)
+    val part2Custom = CustomPartitioning.getCustomSpacePartitioner(bounds2)
+    val pr2Custom = ContextRDD(rdd2.partitionBy(part2Custom), part2Custom.bounds)
+    val expected = new PairRDDFunctions(rdd1).join(rdd2)
+    val res = pr1.spatialJoin(pr2Custom)
+    res.collect() should contain theSameElementsAs expected.collect()
   }
 
 }

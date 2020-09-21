@@ -21,13 +21,9 @@ import geotrellis.raster.io.geotiff._
 import geotrellis.raster.io.geotiff.compression._
 import geotrellis.raster.testkit._
 
-import spire.syntax.cfor._
-import org.scalatest._
+import org.scalatest.funspec.AnyFunSpec
 
-class GeoTiffTileSpec extends FunSpec
-    with RasterMatchers
-    with TileBuilders
-    with GeoTiffTestUtils {
+class GeoTiffTileSpec extends AnyFunSpec with RasterMatchers with TileBuilders with GeoTiffTestUtils {
 
   describe("Creating a GeoTiff tile from an ArrayTile") {
     it("should work against a small int tile") {
@@ -100,6 +96,15 @@ class GeoTiffTileSpec extends FunSpec
       val expected = createTile(arrDouble, 5, 3)
 
       assertEqual(actual, expected)
+    }
+  }
+
+  describe("GeoTiffTile cellType combine") {
+    it("should union cellTypes") {
+      val int = IntArrayTile(Array.ofDim[Int](2).fill(0), 1, 1).toGeoTiffTile()
+      val dt = DoubleArrayTile(Array.ofDim[Double](2).fill(0), 1, 1).toGeoTiffTile()
+
+      int.combine(dt)(_ + _).cellType shouldBe int.cellType.union(dt.cellType)
     }
   }
 }

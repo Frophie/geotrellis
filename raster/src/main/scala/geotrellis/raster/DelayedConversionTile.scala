@@ -16,10 +16,7 @@
 
 package geotrellis.raster
 
-import geotrellis.raster.resample._
-import geotrellis.vector.Extent
 
-import spire.syntax.cfor._
 
 /**
   * [DelayedConversionTile]] represents a tile that wraps an inner tile,
@@ -187,4 +184,6 @@ class DelayedConversionTile(inner: Tile, targetCellType: CellType)
 
     tile
   }
+
+  override def toString: String = s"DelayedConversionTile($cols,$rows,$cellType)"
 }

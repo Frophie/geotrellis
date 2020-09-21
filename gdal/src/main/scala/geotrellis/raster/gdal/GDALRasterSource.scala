@@ -19,15 +19,15 @@ package geotrellis.raster.gdal
 import geotrellis.raster.gdal.GDALDataset.DatasetType
 import geotrellis.proj4._
 import geotrellis.raster._
-import geotrellis.raster.io.geotiff.{AutoHigherResolution, OverviewStrategy}
-import geotrellis.raster.resample.{NearestNeighbor, ResampleMethod}
+import geotrellis.raster.io.geotiff.OverviewStrategy
+import geotrellis.raster.resample.ResampleMethod
 import geotrellis.vector._
 
 class GDALRasterSource(
   val dataPath: GDALPath,
   val options: GDALWarpOptions = GDALWarpOptions.EMPTY,
   private[raster] val targetCellType: Option[TargetCellType] = None
-) extends RasterSource {
+) extends RasterSource { self =>
 
   /**
     * All the information received from the JNI side should be cached on the JVM side,
@@ -97,7 +97,7 @@ class GDALRasterSource(
     * These resolutions could represent actual overview as seen in source file
     * or overviews of VRT that was created as result of resample operations.
     */
-  lazy val resolutions: List[CellSize] = dataset.resolutions(datasetType).map(_.cellSize)
+  lazy val resolutions: List[CellSize] = gridExtent.cellSize :: dataset.resolutions(datasetType).map(_.cellSize)
 
   override def readBounds(bounds: Traversable[GridBounds[Long]], bands: Seq[Int]): Iterator[Raster[MultibandTile]] = {
     bounds
@@ -110,11 +110,13 @@ class GDALRasterSource(
       }
   }
 
-  def reprojection(targetCRS: CRS, resampleTarget: ResampleTarget = DefaultTarget, method: ResampleMethod = NearestNeighbor, strategy: OverviewStrategy = AutoHigherResolution): RasterSource =
+  def reprojection(targetCRS: CRS, resampleTarget: ResampleTarget = DefaultTarget, method: ResampleMethod = ResampleMethod.DEFAULT, strategy: OverviewStrategy = OverviewStrategy.DEFAULT): RasterSource =
     new GDALRasterSource(dataPath, options.reproject(gridExtent, crs, targetCRS, resampleTarget, method))
 
   def resample(resampleTarget: ResampleTarget, method: ResampleMethod, strategy: OverviewStrategy): RasterSource =
-    new GDALRasterSource(dataPath, options.resample(gridExtent, resampleTarget))
+    new GDALRasterSource(dataPath, options.copy(resampleMethod = Some(method)).resample(gridExtent, resampleTarget)) {
+      override lazy val resolutions: List[CellSize] = self.resolutions
+    }
 
   /** Converts the contents of the GDALRasterSource to the [[TargetCellType]].
    *
@@ -157,13 +159,11 @@ class GDALRasterSource(
   }
 
   override def readExtents(extents: Traversable[Extent]): Iterator[Raster[MultibandTile]] = {
-    val bounds = extents.map(gridExtent.gridBoundsFor(_, clamp = false))
+    val bounds = extents.map(_.buffer(- cellSize.width / 2, - cellSize.height / 2)).map(gridExtent.gridBoundsFor(_, clamp = false))
     readBounds(bounds, 0 until bandCount)
   }
 
-  override def toString: String = {
-    s"GDALRasterSource(${dataPath.value},$options)"
-  }
+  override def toString: String = s"GDALRasterSource(${dataPath.value},$options)"
 
   override def equals(other: Any): Boolean = {
     other match {

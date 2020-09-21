@@ -270,7 +270,7 @@ abstract class ArrayTile extends Tile with Serializable {
       case ar: ArrayTile =>
         combineDouble(ar)(f)
       case ct: ConstantTile =>
-        ct.combineDouble(this)(f)
+        ct.combineDouble(this)((z1, z2) => f(z2, z1))
       case ct: CompositeTile =>
         ct.combineDouble(this)((z1, z2) => f(z2, z1))
       case t =>
@@ -298,8 +298,10 @@ abstract class ArrayTile extends Tile with Serializable {
           val value = applyDouble(i)
           val otherValue = tile.applyDouble(i)
 
-          if (value.isNaN && otherValue.isNaN) return true
-          if (value != otherValue) return false
+          // if both values are not NaNs and are not equal
+          if (!java.lang.Double.isNaN(value) && !java.lang.Double.isNaN(otherValue) && (value != otherValue)) return false
+          // if one of the values is a NaN
+          if((!java.lang.Double.isNaN(value) && java.lang.Double.isNaN(otherValue)) || java.lang.Double.isNaN(value) && !java.lang.Double.isNaN(otherValue)) return false
           i += 1
         }
       else
@@ -402,6 +404,8 @@ abstract class ArrayTile extends Tile with Serializable {
     }
     arr
   }
+
+  override def toString: String = s"ArrayTile($cols,$rows,$cellType)"
 }
 
 /**

@@ -17,17 +17,16 @@
 package geotrellis.raster
 
 import geotrellis.raster.testkit.{RasterMatchers, TileBuilders}
-import org.scalatest.{FunSpec, Matchers}
+
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.funspec.AnyFunSpec
 
 /**
  * Test rig for [[ConstantTile]]
  *
  * @since 10/2/17
  */
-class ConstantTileSpec extends FunSpec
-  with Matchers
-  with RasterMatchers
-  with TileBuilders {
+class ConstantTileSpec extends AnyFunSpec with Matchers with RasterMatchers with TileBuilders {
 
   private val cols = 11
   private val rows = 9
@@ -84,6 +83,14 @@ class ConstantTileSpec extends FunSpec
       val r1 = ConstantTile.fromBytes(t1.toBytes(), t1.cellType, cols, rows)
       assert(t1 === r1)
     }
+  }
 
+  describe("ConstantTile cellType combine") {
+    it("should union cellTypes") {
+      val int = IntConstantTile(-65536, 1, 1)
+      val dt = DoubleConstantTile(-Math.E, 1, 1)
+
+      int.combine(dt)(_ + _).cellType shouldBe int.cellType.union(dt.cellType)
+    }
   }
 }

@@ -18,24 +18,20 @@ import Dependencies._
 import GTBenchmarkPlugin.Keys._
 import sbt._
 import sbt.Keys._
-import sbtassembly.AssemblyPlugin.autoImport.{MergeStrategy, assemblyMergeStrategy}
-import sbtassembly.AssemblyKeys._
-import sbtassembly.{PathList, ShadeRule}
+import sbtassembly.AssemblyPlugin.autoImport._
 import com.typesafe.tools.mima.plugin.MimaKeys._
+import de.heikoseeberger.sbtheader.{CommentStyle, FileType}
+import de.heikoseeberger.sbtheader.HeaderPlugin.autoImport.{HeaderLicense, headerLicense, headerMappings}
 import sbtprotoc.ProtocPlugin.autoImport.PB
 
 object Settings {
   object Repositories {
-    val locationtechReleases  = "locationtech-releases" at "https://repo.locationtech.org/content/repositories/releases/"
-    val locationtechSnapshots = "locationtech-snapshots" at "https://repo.locationtech.org/content/repositories/snapshots/"
-    val boundlessgeo          = "boundlessgeo" at "https://repo.boundlessgeo.com/main/"
-    val boundlessgeoRelease   = "boundless" at "https://repo.boundlessgeo.com/release"
-    val geosolutions          = "geosolutions" at "https://maven.geo-solutions.it/"
-    val osgeo                 = "osgeo" at "https://download.osgeo.org/webdav/geotools/"
-    val ivy2Local             = Resolver.file("local", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
-    val mavenLocal            = Resolver.mavenLocal
-    val local                 = Seq(ivy2Local, mavenLocal)
-    val azaveaBintray         = Resolver.bintrayRepo("azavea", "geotrellis")
+    val eclipseReleases = "eclipse-releases" at "https://repo.eclipse.org/content/groups/releases"
+    val osgeoReleases   = "osgeo-releases" at "https://repo.osgeo.org/repository/release/"
+    val geosolutions    = "geosolutions" at "https://maven.geo-solutions.it/"
+    val ivy2Local       = Resolver.file("local", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
+    val mavenLocal      = Resolver.mavenLocal
+    val local           = Seq(ivy2Local, mavenLocal)
   }
 
   lazy val noForkInTests = Seq(
@@ -54,7 +50,9 @@ object Settings {
     "-language:existentials",
     "-language:experimental.macros",
     "-feature",
-    "-Ypartial-unification", // Required by Cats
+    "-Ypartial-unification", // required by Cats
+    // "-Yrangepos",            // required by SemanticDB compiler plugin
+    // "-Ywarn-unused-import",  // required by `RemoveUnused` rule
     "-target:jvm-1.8")
 
   lazy val commonSettings = Seq(
@@ -67,12 +65,11 @@ object Settings {
     Test / publishArtifact := false,
     pomIncludeRepository := { _ => false },
     autoAPIMappings := true,
-    useCoursier := false,
     Global / cancelable := true,
 
     publishTo := {
       val sonatype = "https://oss.sonatype.org/"
-      val locationtech = "https://repo.locationtech.org/content/repositories"
+      val locationtech = "https://repo.eclipse.org/content/repositories"
 
       System.getProperty("release") match {
         case "locationtech" if isSnapshot.value =>
@@ -88,6 +85,7 @@ object Settings {
 
     addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.11.0" cross CrossVersion.full),
     addCompilerPlugin("org.scalamacros" %% "paradise" % "2.1.1" cross CrossVersion.full),
+    addCompilerPlugin("org.scalameta" % "semanticdb-scalac" % "4.3.20" cross CrossVersion.full),
 
     pomExtra := (
       <developers>
@@ -107,8 +105,18 @@ object Settings {
     resolvers ++= Seq(
       Resolver.mavenLocal,
       Settings.Repositories.geosolutions,
-      Settings.Repositories.osgeo,
-      Settings.Repositories.locationtechReleases
+      Settings.Repositories.osgeoReleases,
+      Settings.Repositories.eclipseReleases
+    ),
+    headerLicense := Some(HeaderLicense.ALv2(java.time.Year.now.getValue.toString, "Azavea")),
+    headerMappings := Map(
+      FileType.scala -> CommentStyle.cStyleBlockComment.copy(
+        commentCreator = { (text, existingText) => {
+          // preserve year of old headers
+          val newText = CommentStyle.cStyleBlockComment.commentCreator.apply(text, existingText)
+          existingText.flatMap(_ => existingText.map(_.trim)).getOrElse(newText)
+        } }
+      )
     )
   )
 
@@ -161,7 +169,7 @@ object Settings {
     jmhExtraOptions := Some("-jvmArgsAppend -Xmx8G")
     //jmhExtraOptions := Some("-jvmArgsAppend -Xmx8G -prof jmh.extras.JFR")
     //jmhExtraOptions := Some("-jvmArgsAppend -prof geotrellis.bench.GeotrellisFlightRecordingProfiler")
-  )
+  ) ++ commonSettings
 
   lazy val cassandra = Seq(
     name := "geotrellis-cassandra",
@@ -233,8 +241,8 @@ object Settings {
       scalatest % Test
     ),
     resolvers ++= Seq(
-      Repositories.boundlessgeo,
-      Repositories.locationtechReleases
+      Repositories.osgeoReleases,
+      Repositories.eclipseReleases
     ),
     console / initialCommands :=
       """
@@ -251,21 +259,19 @@ object Settings {
   lazy val geotools = Seq(
     name := "geotrellis-geotools",
     libraryDependencies ++= Seq(
+      jaiCore,
+      jts,
+      spire,
+      scalatest % Test
+    ) ++ Seq(
       geotoolsCoverage,
       geotoolsHsql,
       geotoolsMain,
       geotoolsReferencing,
-      jts,
-      spire,
       geotoolsGeoTiff % Test,
-      geotoolsShapefile % Test,
-      scalatest % Test,
-      // This is one finicky dependency. Being explicit in hopes it will stop hurting Travis.
-      jaiCore % Test from "https://download.osgeo.org/webdav/geotools/javax/media/jai_core/1.1.3/jai_core-1.1.3.jar"
-    ),
-    externalResolvers ++= Seq(
-      Repositories.boundlessgeo
-    ),
+      geotoolsShapefile % Test
+    ).map(_ exclude("javax.media", "jai_core")),
+    externalResolvers += Settings.Repositories.osgeoReleases,
     console / initialCommands :=
       """
       import geotrellis.geotools._
@@ -324,9 +330,8 @@ object Settings {
       scalatest % Test
     ),
     resolvers ++= Seq(
-      Repositories.boundlessgeoRelease,
-      Repositories.geosolutions,
-      Repositories.osgeo
+      Repositories.osgeoReleases,
+      Repositories.geosolutions
     ),
     assembly / assemblyMergeStrategy := {
       case "reference.conf" => MergeStrategy.concat
@@ -370,19 +375,6 @@ object Settings {
       sparkSql % Test,
       scalatest % Test
     ),
-    /** https://github.com/lucidworks/spark-solr/issues/179 */
-    dependencyOverrides ++= {
-      val deps = Seq(
-        "com.fasterxml.jackson.core" % "jackson-core" % "2.6.7",
-        "com.fasterxml.jackson.core" % "jackson-databind" % "2.6.7",
-        "com.fasterxml.jackson.core" % "jackson-annotations" % "2.6.7"
-      )
-      CrossVersion.partialVersion(scalaVersion.value) match {
-        // if Scala 2.12+ is used
-        case Some((2, scalaMajor)) if scalaMajor >= 12 => deps
-        case _ => deps :+ "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.6.7"
-      }
-    },
     console / initialCommands :=
       """
       import geotrellis.raster._
@@ -412,19 +404,6 @@ object Settings {
       sparkSql % Test,
       scalatest % Test
     ),
-    /** https://github.com/lucidworks/spark-solr/issues/179 */
-    dependencyOverrides ++= {
-      val deps = Seq(
-        "com.fasterxml.jackson.core" % "jackson-core" % "2.6.7",
-        "com.fasterxml.jackson.core" % "jackson-databind" % "2.6.7",
-        "com.fasterxml.jackson.core" % "jackson-annotations" % "2.6.7"
-      )
-      CrossVersion.partialVersion(scalaVersion.value) match {
-        // if Scala 2.12+ is used
-        case Some((2, scalaMajor)) if scalaMajor >= 12 => deps
-        case _ => deps :+ "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.6.7"
-      }
-    },
     console / initialCommands :=
       """
       import geotrellis.raster._
@@ -444,8 +423,7 @@ object Settings {
     libraryDependencies ++= Seq(
       spireMacro,
       "org.scala-lang" % "scala-reflect" % scalaVersion.value
-    ),
-    resolvers += Resolver.sonatypeRepo("snapshots")
+    )
   ) ++ commonSettings
 
   lazy val proj4 = Seq(
@@ -505,21 +483,22 @@ object Settings {
   lazy val s3 = Seq(
     name := "geotrellis-s3",
     libraryDependencies ++= Seq(
-      awsSdkS3,
+      awsSdkS3 excludeAll ExclusionRule("com.fasterxml.jackson.core"),
       spire,
       scaffeine,
       scalatest % Test
     ),
-    dependencyOverrides ++= {
+    /** https://github.com/lucidworks/spark-solr/issues/179 */
+    libraryDependencies ++= {
       val deps = Seq(
-        "com.fasterxml.jackson.core" % "jackson-core" % "2.6.7",
-        "com.fasterxml.jackson.core" % "jackson-databind" % "2.6.7",
-        "com.fasterxml.jackson.core" % "jackson-annotations" % "2.6.7"
+        jacksonCore,
+        jacksonDatabind,
+        jacksonAnnotations
       )
       CrossVersion.partialVersion(scalaVersion.value) match {
         // if Scala 2.12+ is used
         case Some((2, scalaMajor)) if scalaMajor >= 12 => deps
-        case _ => deps :+ "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.6.7"
+        case _ => deps :+ jacksonModuleScala
       }
     },
     mimaPreviousArtifacts := Set(
@@ -539,24 +518,11 @@ object Settings {
     name := "geotrellis-s3-spark",
     libraryDependencies ++= Seq(
       sparkCore % Provided,
-      awsSdkS3,
       spire,
       scaffeine,
       sparkSql % Test,
       scalatest % Test
     ),
-    dependencyOverrides ++= {
-      val deps = Seq(
-        "com.fasterxml.jackson.core" % "jackson-core" % "2.6.7",
-        "com.fasterxml.jackson.core" % "jackson-databind" % "2.6.7",
-        "com.fasterxml.jackson.core" % "jackson-annotations" % "2.6.7"
-      )
-      CrossVersion.partialVersion(scalaVersion.value) match {
-        // if Scala 2.12+ is used
-        case Some((2, scalaMajor)) if scalaMajor >= 12 => deps
-        case _ => deps :+ "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.6.7"
-      }
-    },
     mimaPreviousArtifacts := Set(
       "org.locationtech.geotrellis" %% "geotrellis-s3" % Version.previousVersion
     ),
@@ -576,11 +542,10 @@ object Settings {
   lazy val shapefile = Seq(
     name := "geotrellis-shapefile",
     libraryDependencies ++= Seq(
-      geotoolsShapefile,
-      // This is one finicky dependency. Being explicit in hopes it will stop hurting Travis.
-      jaiCore from "https://download.osgeo.org/webdav/geotools/javax/media/jai_core/1.1.3/jai_core-1.1.3.jar"
+      jaiCore,
+      geotoolsShapefile exclude("javax.media", "jai_core")
     ),
-    resolvers += Repositories.osgeo,
+    resolvers += Repositories.osgeoReleases,
     Test / fork := false
   ) ++ commonSettings
 
@@ -590,7 +555,6 @@ object Settings {
       sparkCore % Provided,
       hadoopClient % Provided,
       uzaygezenCore,
-      scalaj,
       avro,
       spire,
       chronoscala,
@@ -617,8 +581,12 @@ object Settings {
   lazy val `spark-pipeline` = Seq(
     name := "geotrellis-spark-pipeline",
     libraryDependencies ++= Seq(
-      circe("core").value, circe("generic").value, circe("generic-extras").value, circe("parser").value,
-      sparkCore % Provided, sparkSql % Test,
+      circe("core").value,
+      circe("generic").value,
+      circe("generic-extras").value,
+      circe("parser").value,
+      sparkCore % Provided,
+      sparkSql % Test,
       scalatest % Test
     ),
     assembly / test := {},
@@ -646,7 +614,8 @@ object Settings {
   lazy val `spark-testkit` = Seq(
     name := "geotrellis-spark-testkit",
     libraryDependencies ++= Seq(
-      sparkCore % Provided, sparkSql % Provided,
+      sparkCore % Provided,
+      sparkSql % Provided,
       hadoopClient % Provided,
       scalatest,
       chronoscala
@@ -658,6 +627,7 @@ object Settings {
     libraryDependencies ++= Seq(
       logging,
       pureconfig,
+      scalaj,
       spire,
       scalatest % Test
     )
@@ -743,7 +713,6 @@ object Settings {
       scalatest % Test,
       gdalBindings % Test
     ),
-    resolvers += Repositories.azaveaBintray,
     Test / fork := true,
     Test / parallelExecution := false,
     Test / testOptions += Tests.Argument("-oDF"),
@@ -754,23 +723,10 @@ object Settings {
     name := "geotrellis-gdal-spark",
     libraryDependencies ++= Seq(
       gdalWarp,
-      sparkCore % Provided, sparkSql % Test,
+      sparkCore % Provided,
+      sparkSql % Test,
       scalatest % Test
     ),
-    // caused by the AWS SDK v2
-    dependencyOverrides ++= {
-      val deps = Seq(
-        jacksonCore,
-        jacksonDatabind,
-        jacksonAnnotations
-      )
-      CrossVersion.partialVersion(scalaVersion.value) match {
-        // if Scala 2.12+ is used
-        case Some((2, scalaMajor)) if scalaMajor >= 12 => deps
-        case _ => deps :+ jacksonModuleScala
-      }
-    },
-    resolvers += Repositories.azaveaBintray,
     Test / fork := true,
     Test / parallelExecution := false,
     Test / testOptions += Tests.Argument("-oDF"),

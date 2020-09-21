@@ -20,16 +20,14 @@ import geotrellis.raster.gdal.GDALDataset.DatasetType
 import geotrellis.raster.{ConvertTargetCellType, TargetCellType}
 import geotrellis.raster._
 import geotrellis.raster.resample._
-import geotrellis.raster.io.geotiff.{AutoHigherResolution, OverviewStrategy}
+import geotrellis.raster.io.geotiff.OverviewStrategy
 import geotrellis.proj4.CRS
 import geotrellis.vector.Extent
 
 import cats.Monad
 import cats.instances.option._
-import cats.syntax.apply._
 import cats.syntax.option._
 
-import scala.collection.JavaConverters._
 
 /**
   * GDALWarpOptions basically should cover https://www.gdal.org/gdalwarp.html
@@ -85,7 +83,7 @@ case class GDALWarpOptions(
     *        Specify AUTO-n where n is an integer greater or equal to 1, to select an overview level below the AUTO one.
     *        Or specify NONE to force the base resolution to be used (can be useful if overviews have been generated with a low quality resampling method, and the warping is done using a higher quality resampling method).
     */
-  ovr: Option[OverviewStrategy] = Some(AutoHigherResolution),
+  ovr: Option[OverviewStrategy] = Some(OverviewStrategy.DEFAULT),
   /** -to, set a transformer option suitable to pass to [GDALCreateGenImgProjTransformer2()](https://www.gdal.org/gdal__alg_8h.html#a94cd172f78dbc41d6f407d662914f2e3) */
   to: List[(String, String)] = Nil,
   /** -novshiftgrid, Disable the use of vertical datum shift grids when one of the source or target SRS has an explicit vertical datum, and the input dataset is a single band dataset. */
@@ -256,20 +254,38 @@ case class GDALWarpOptions(
    */
   def reproject(rasterExtent: GridExtent[Long], sourceCRS: CRS, targetCRS: CRS, resampleTarget: ResampleTarget = DefaultTarget, resampleMethod: ResampleMethod = NearestNeighbor): GDALWarpOptions = {
     val reprojectOptions = ResampleTarget.toReprojectOptions(rasterExtent, resampleTarget, resampleMethod)
-    val re = rasterExtent.reproject(sourceCRS, targetCRS, reprojectOptions)
+    val reprojectedRasterExtent = rasterExtent.reproject(sourceCRS, targetCRS, reprojectOptions)
 
-    this.copy(
-      cellSize       = re.cellSize.some,
-      targetCRS      = targetCRS.some,
-      sourceCRS      = sourceCRS.some,
-      resampleMethod = reprojectOptions.method.some
-    )
+    resampleTarget match {
+      case TargetDimensions(cols, rows) =>
+        this.copy(
+          te             = reprojectedRasterExtent.extent.some,
+          cellSize       = None,
+          targetCRS      = targetCRS.some,
+          sourceCRS      = this.sourceCRS orElse sourceCRS.some,
+          resampleMethod = reprojectOptions.method.some,
+          dimensions     = (cols.toInt, rows.toInt).some
+        )
+      case _ =>
+        val re = {
+          val targetRasterExtent = resampleTarget(reprojectedRasterExtent).toRasterExtent
+          if(this.alignTargetPixels) targetRasterExtent.alignTargetPixels else targetRasterExtent
+        }
+
+        this.copy(
+          cellSize       = re.cellSize.some,
+          te             = re.extent.some,
+          targetCRS      = targetCRS.some,
+          sourceCRS      = this.sourceCRS orElse sourceCRS.some,
+          resampleMethod = reprojectOptions.method.some
+        )
+    }
   }
 
   /** Adjust GDAL options to represents resampling with following parameters .
    * This call matches semantics and arguments of {@see RasterSource#resample}
    */
-  def resample(gridExtent: => GridExtent[Long], resampleTarget: ResampleTarget): GDALWarpOptions = {
+  def resample(gridExtent: => GridExtent[Long], resampleTarget: ResampleTarget): GDALWarpOptions =
     resampleTarget match {
       case TargetDimensions(cols, rows) =>
         this.copy(te = gridExtent.extent.some, cellSize = None, dimensions = (cols.toInt, rows.toInt).some)
@@ -282,7 +298,7 @@ case class GDALWarpOptions(
 
         this.copy(te = re.extent.some, cellSize = re.cellSize.some)
     }
-  }
+
   /** Adjust GDAL options to represents conversion to desired cell type.
    * This call matches semantics and arguments of {@see RasterSource#convert}
    */
